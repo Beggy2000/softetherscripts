@@ -110,8 +110,12 @@ function unpackAndCompile () {
         echo "${destinationDir} is not directory" >&2
         return 1
     fi
+    local programmDirName="${destinationDir}/${programmType}"
+    if [[ -d "${programmDirName}" ]] ; then 
+        echo "Critical error: the programm directory(${programmDirName}) already exists. Please remove it or rename before continue." >&2
+        return 1
+    fi
     tar -xzvf "${archiveFile}" -C "${destinationDir}"
-    local programmDirName="${destinationDir}/${programmType}1"
     if [[ ! -d "${programmDirName}" ]] ; then 
         echo "Critical error: there is no programm directory(${programmDirName}) after unpack ${archiveFile} in ${destinationDir}" >&2
         return 1
