@@ -71,7 +71,8 @@ function getLastRTM () {
         return 1
     fi
 
-    local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programmType}" | grep "${archType}" | head -n 1)
+    local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programmType}" | grep "${architectureType}" | head -n 1)
+    echo "${rtmFileUrl} was found as last rtm version."
     wget "https://github.com/${rtmFileUrl}" -O "${archiveFile}"
     return 0
 }	
@@ -120,7 +121,7 @@ function unpackAndCompile () {
     fi
     cd "${programmDirName}"
     # Workaround for 18.04+
-    sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
+    #sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
     make i_read_and_agree_the_license_agreement
     return 0 
 }	
