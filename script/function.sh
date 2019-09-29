@@ -39,12 +39,10 @@ function checkIfRoot () {
 #===============================================================================
 function updateTheSystem () {
 # Update system
-#apt-get update && apt-get -y upgrade
-echo "apt-get update && apt-get -y upgrade"
+apt-get update && apt-get -y upgrade
 
 # Get build tools
-#apt-get -y install build-essential wget curl gcc make wget tzdata git libreadline-dev libncurses-dev libssl-dev zlib1g-dev
-echo "apt-get -y install build-essential wget curl gcc make wget tzdata git libreadline-dev libncurses-dev libssl-dev zlib1g-dev"
+apt-get -y install build-essential wget curl gcc make wget tzdata git libreadline-dev libncurses-dev libssl-dev zlib1g-dev
 
 }	
 # ----------  end of function updateTheSystem  ----------
@@ -122,7 +120,7 @@ function unpackAndCompile () {
     fi
     cd "${programmDirName}"
     # Workaround for 18.04+
-    #${SUDO} sed -i 's|OPTIONS=-O2|OPTIONS=-no-pie -O2|' Makefile
+    sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
     make i_read_and_agree_the_license_agreement
     return 0 
 }	
