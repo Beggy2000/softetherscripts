@@ -31,6 +31,7 @@ function removeTemporaryDirectory () {
         echo "Would you please to remove temporary directory (${ARCHIVE_DIR_NAME}) by hands"
         return 1
     fi
+    echo "remove temporary directory ${ARCHIVE_DIR_NAME}"
     rm -rf "${ARCHIVE_DIR_NAME}"
     return 0
 }	
