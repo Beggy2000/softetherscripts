@@ -123,6 +123,10 @@ function unpackAndCompile () {
     # Workaround for 18.04+
     #sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
     make i_read_and_agree_the_license_agreement
+    find . -type d -exec chmod u=rx,go= {} \;
+    find . -type f -exec chmod u=r,go= {} \;
+    chown -R root:root .
+    cd - > /dev/null #to prevent directory name output
     return 0 
 }	
 # ----------  end of function unpackAndCompile  ----------
