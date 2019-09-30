@@ -1,4 +1,4 @@
-#!/bin/bash - 
+#!/bin/bash -
 #===============================================================================
 #
 #          FILE: installServer.sh
@@ -77,7 +77,9 @@ getLastRTM "${PROGRAMM_TYPE}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTh
 
 unpackAndCompile "${PROGRAMM_TYPE}" "${ARCHIVE_FILE_NAME}" "${DESTINATION_DIR}" || stopTheScript "" 1
 
-configureServer "${DESTINATION_DIR}"
+declare programDirName="${DESTINATION_DIR}/${PROGRAMM_TYPE}"
+configureServer "${programDirName}"
+
 #configureNetwork
 #configureSystemctl
 

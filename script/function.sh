@@ -55,9 +55,9 @@ apt-get -y install build-essential wget curl gcc make wget tzdata git libreadlin
 #       RETURNS:  
 #===============================================================================
 function getLastRTM () {
-    local programmType=$1
-    if [[ -z "${programmType}" ]] ; then 
-        echo "programmType is undefined" >&2
+    local programType=$1
+    if [[ -z "${programType}" ]] ; then 
+        echo "programType is undefined" >&2
         return 1
     fi
     local architectureType=$2
@@ -71,7 +71,7 @@ function getLastRTM () {
         return 1
     fi
 
-    local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programmType}" | grep "${architectureType}" | head -n 1)
+    local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programType}" | grep "${architectureType}" | head -n 1)
     echo "${rtmFileUrl} was found as last rtm version."
     wget "https://github.com/${rtmFileUrl}" -O "${archiveFile}"
     return 0
@@ -86,9 +86,9 @@ function getLastRTM () {
 #       RETURNS:  
 #===============================================================================
 function unpackAndCompile () {
-    local programmType=$1
-    if [[ -z "${programmType}" ]] ; then 
-        echo "programmType is undefined" >&2
+    local programType=$1
+    if [[ -z "${programType}" ]] ; then 
+        echo "programType is undefined" >&2
         return 1
     fi
     local archiveFile=$2
@@ -109,17 +109,17 @@ function unpackAndCompile () {
         echo "${destinationDir} is not directory" >&2
         return 1
     fi
-    local programmDirName="${destinationDir}/${programmType}"
-    if [[ -d "${programmDirName}" ]] ; then 
-        echo "Critical error: the programm directory(${programmDirName}) already exists. Please remove it or rename before continue." >&2
+    local programDirName="${destinationDir}/${programType}"
+    if [[ -d "${programDirName}" ]] ; then 
+        echo "Critical error: the program directory(${programDirName}) already exists. Please remove it or rename before continue." >&2
         return 1
     fi
     tar -xzvf "${archiveFile}" -C "${destinationDir}"
-    if [[ ! -d "${programmDirName}" ]] ; then 
-        echo "Critical error: there is no programm directory(${programmDirName}) after unpack ${archiveFile} in ${destinationDir}" >&2
+    if [[ ! -d "${programDirName}" ]] ; then 
+        echo "Critical error: there is no program directory(${programDirName}) after unpack ${archiveFile} in ${destinationDir}" >&2
         return 1
     fi
-    cd "${programmDirName}"
+    cd "${programDirName}"
     # Workaround for 18.04+
     #sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
     make i_read_and_agree_the_license_agreement
@@ -138,17 +138,17 @@ function unpackAndCompile () {
 #       RETURNS:  
 #===============================================================================
 function configureServer () {
-    local destinationDir=$1
-    if [[ -z "${destinationDir}" ]] ; then 
-        echo "destinationDir is undefined" >&2
+    local programDirName=$1
+    if [[ -z "${programDirName}" ]] ; then 
+        echo "programDirName is undefined" >&2
         return 1
     fi
-    if [[ ! -d "${destinationDir}" ]] ; then 
-        echo "${destinationDir} is not directory" >&2
+    if [[ ! -d "${programDirName}" ]] ; then 
+        echo "${programDirName} is not a directory" >&2
         return 1
     fi
 
-    cd "${destinationDir}"
+    cd "${programDirName}"
     chmod u+x ./vpnserver 
     chmod u+x ./vpncmd
     cd -
