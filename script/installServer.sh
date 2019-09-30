@@ -77,7 +77,7 @@ getLastRTM "${PROGRAMM_TYPE}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTh
 
 unpackAndCompile "${PROGRAMM_TYPE}" "${ARCHIVE_FILE_NAME}" "${DESTINATION_DIR}" || stopTheScript "" 1
 
-#configureServer
+configureServer "${DESTINATION_DIR}"
 #configureNetwork
 #configureSystemctl
 

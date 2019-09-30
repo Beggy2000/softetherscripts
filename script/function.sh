@@ -130,3 +130,27 @@ function unpackAndCompile () {
     return 0 
 }	
 # ----------  end of function unpackAndCompile  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  configureServer
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function configureServer () {
+    local destinationDir=$1
+    if [[ -z "${destinationDir}" ]] ; then 
+        echo "destinationDir is undefined" >&2
+        return 1
+    fi
+    if [[ ! -d "${destinationDir}" ]] ; then 
+        echo "${destinationDir} is not directory" >&2
+        return 1
+    fi
+
+    cd "${destinationDir}"
+    chmod u+x ./vpnserver 
+    chmod u+x ./vpncmd
+    cd -
+}	
+# ----------  end of function configureServer  ----------
