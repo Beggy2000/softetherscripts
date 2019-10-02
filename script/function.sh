@@ -18,7 +18,6 @@
 #===============================================================================
 
 
-
 #===  FUNCTION  ================================================================
 #          NAME:  checkIfRoot
 #   DESCRIPTION:  
@@ -123,9 +122,6 @@ function unpackAndCompile () {
     # Workaround for 18.04+
     #sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
     make i_read_and_agree_the_license_agreement
-    find . -type d -exec chmod u=rx,go= {} \;
-    find . -type f -exec chmod u=r,go= {} \;
-    chown -R root:root .
     cd - > /dev/null #to prevent directory name output
     return 0 
 }	
@@ -149,8 +145,110 @@ function configureServer () {
     fi
 
     cd "${programDirName}"
+    if [[ -e "./${SERVER_CONFIG_FILE_NAME}" ]]; then
+        echo "./${SERVER_CONFIG_FILE_NAME} is already here!"
+        return 1
+    fi
+    #simple config file
+    cat <<EOF >"./${SERVER_CONFIG_FILE_NAME}"
+# Softether Configuration File
+# ----------------------------
+#
+# You may edit this file when the VPN Server / Client / Bridge program is not running.
+#
+# In prior to edit this file manually by your text editor,
+# shutdown the VPN Server / Client / Bridge background service.
+# Otherwise, all changes will be lost.
+#
+declare root
+{
+        uint ConfigRevision 1
+
+        declare DDnsClient
+        {
+                bool Disabled true
+        }
+        declare ServerConfiguration
+        {
+                bool UseKeepConnect false
+        }
+}
+
+EOF
+    
+    chown -R root:root .
+    find . -type d -exec chmod u=rx,go= {} \;
+    find . -type f -exec chmod u=r,go= {} \;
     chmod u+x ./vpnserver 
     chmod u+x ./vpncmd
+
+    tuneTheKernel
     cd -
 }	
 # ----------  end of function configureServer  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  tuneTheKernel
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function tuneTheKernel () {
+    if [[ -z "${SYSCTL_FILE}" ]]; then
+        echo "SYSCTL_FILE is undefined." >&2
+        return 1
+    fi
+    [[ -e "${SYSCTL_FILE}" ]] || touch "${SYSCTL_FILE}"
+
+    # Act as router
+    setProperty "${SYSCTL_FILE}" net.ipv4.ip_forward 1
+    # Tune Kernel
+    setProperty "${SYSCTL_FILE}" net.ipv4.ip_local_port_range "1024 65535"
+    setProperty "${SYSCTL_FILE}" net.ipv4.tcp_congestion_control "bbr"
+    setProperty "${SYSCTL_FILE}" net.core.default_qdisc "fq_codel"
+    #sysctl --system
+    service procps start
+
+}
+# ----------  end of function tuneTheKernel  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  setProperty
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function setProperty () {
+    local fileName=$1
+    if [[ -z "${fileName}" ]] ; then 
+        echo "fileName is undefined" >&2
+        return 1
+    fi
+    if [[ ! -r "${fileName}" ]] ; then 
+        echo "${fileName} is not readable" >&2
+        return 1
+    fi
+    local propertyName=$2
+    if [[ -z "${propertyName}" ]] ; then 
+        echo "propertyName is undefined" >&2
+        return 1
+    fi
+    local escapedPropertyName=$(echo "${propertyName}" | sed 's|\.|\\.|g')
+    local propertyValue=$3
+    if [[ -z "${propertyValue}" ]] ; then
+        #comment out
+        sed -i "s|^\([[:space:]]*${escapedPropertyName}[[:space:]]*=\)|#\1|g" "${fileName}"
+        return 0
+    fi
+
+    #uncomment or edit
+    sed -i "s|^[[:space:]]*#\?[[:space:]]*${escapedPropertyName}[[:space:]]*=.*$|${propertyName}=${propertyValue}|g" "${fileName}"
+    if ! grep --quiet "^[[:space:]]*${escapedPropertyName}[[:space:]]*=[[:space:]]*${propertyValue}[[:space:]]*$" "${fileName}" ; then
+        echo "${propertyName}=${propertyValue}" >> "${fileName}"
+    fi
+    return 0
+}
+# ----------  end of function setProperty  ----------
+
