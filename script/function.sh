@@ -17,7 +17,6 @@
 #      REVISION:  ---
 #===============================================================================
 
-
 #===  FUNCTION  ================================================================
 #          NAME:  checkIfRoot
 #   DESCRIPTION:  
@@ -55,20 +54,11 @@ apt-get -y install build-essential wget curl gcc make wget tzdata git libreadlin
 #===============================================================================
 function getLastRTM () {
     local programType=$1
-    if [[ -z "${programType}" ]] ; then 
-        echo "programType is undefined" >&2
-        return 1
-    fi
+    assertNotEmpty "${programType}" "programType" || return 1
     local architectureType=$2
-    if [[ -z "${architectureType}" ]] ; then 
-        echo "architectureType is undefined" >&2
-        return 1
-    fi
+    assertNotEmpty "${architectureType}" "architectureType" || return 1
     local archiveFile=$3
-    if [[ -z "${archiveFile}" ]] ; then 
-        echo "archiveFile is undefined" >&2
-        return 1
-    fi
+    assertNotEmpty "${archiveFile}" "archiveFile" || return 1
 
     local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programType}" | grep "${architectureType}" | head -n 1)
     echo "${rtmFileUrl} was found as last rtm version."
@@ -86,28 +76,12 @@ function getLastRTM () {
 #===============================================================================
 function unpackAndCompile () {
     local programType=$1
-    if [[ -z "${programType}" ]] ; then 
-        echo "programType is undefined" >&2
-        return 1
-    fi
+    assertNotEmpty "${programType}" "programType" || return 1
     local archiveFile=$2
-    if [[ -z "${archiveFile}" ]] ; then 
-        echo "archiveFile is undefined" >&2
-        return 1
-    fi
-    if [[ ! -r "${archiveFile}" ]] ; then 
-        echo "${archiveFile} is not readable" >&2
-        return 1
-    fi
+    assertReadableFile "${archiveFile}" "archiveFile" || return 1
     local destinationDir=$3
-    if [[ -z "${destinationDir}" ]] ; then 
-        echo "destinationDir is undefined" >&2
-        return 1
-    fi
-    if [[ ! -d "${destinationDir}" ]] ; then 
-        echo "${destinationDir} is not directory" >&2
-        return 1
-    fi
+    assertExistingDirectory "${destinationDir}" "destinationDir" || return 1
+    
     local programDirName="${destinationDir}/${programType}"
     if [[ -d "${programDirName}" ]] ; then 
         echo "Critical error: the program directory(${programDirName}) already exists. Please remove it or rename before continue." >&2
@@ -134,23 +108,136 @@ function unpackAndCompile () {
 #       RETURNS:  
 #===============================================================================
 function configureServer () {
+    assertNotEmpty "${SERVER}" "SERVER" || return 1
+    assertNotEmpty "${CONFIGURATOR}" "CONFIGURATOR" || return 1
+
     local programDirName=$1
-    if [[ -z "${programDirName}" ]] ; then 
-        echo "programDirName is undefined" >&2
-        return 1
+    assertExistingDirectory "${programDirName}" "programDirName" || return 1
+
+    cd "${programDirName}"
+    
+    generateSimpleConfig "${programDirName}"|| return 1
+    generateSystemDService "${programDirName}" || return 1
+    generateSystemDService "${programDirName}" || return 1
+    tuneTheKernel "${programDirName}" || return 1
+
+    chown -R root:root .
+    find . -type d -exec chmod u=rx,go= {} \;
+    find . -type f -exec chmod u=r,go= {} \;
+    chmod u+x "./${SERVER}" 
+    chmod u+x "./${CONFIGURATOR}"
+
+    cd -
+}	
+# ----------  end of function configureServer  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  checkFileAndLink
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function checkFileAndLink () {
+    local fileName=$1
+    local linkFileName=$2
+    if [[ -e "${linkFileName}" ]]; then
+        if [[ ! -L "${linkFileName}" ]]; then
+            echo "${linkFileName} is not a link. Stop the script to avoid overwriting it." >&2
+            return 1
+        fi
+        local realFileName=$(realpath "${linkFileName}")
+        if [[ "${realFileName}" != "${fileName}" ]]; then
+            echo "Link is pointing to a ${realFileName} instead ${fileName}. Stop the script to avoid overwriting the real file. Please fix it before start again." >&2
+            return 1
+        fi
     fi
-    if [[ ! -d "${programDirName}" ]] ; then 
-        echo "${programDirName} is not a directory" >&2
+    [[ -e "${fileName}" ]] || touch "${fileName}"
+    ln -sfv "${fileName}" "${linkFileName}"
+    return 0 
+}
+# ----------  end of function checkFileAndLink  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  tuneTheKernel
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function tuneTheKernel () {
+    local serverDir=$1
+    assertNotEmpty "${serverDir}" "serverDir" || return 1
+
+    assertNotEmpty "${SYSCTL_FILE}" "SYSCTL_FILE" || return 1
+    assertNotEmpty "${SYSCTL_LINK}" "SYSCTL_LINK" || return 1
+    
+    local confFileName=${serverDir}/${SYSCTL_FILE}
+    checkFileAndLink "${confFileName}" "${SYSCTL_LINK}"
+
+    # Act as router
+    setProperty "${confFileName}" net.ipv4.ip_forward 1
+    # Tune Kernel
+    setProperty "${confFileName}" net.ipv4.ip_local_port_range "1024 65535"
+    setProperty "${confFileName}" net.ipv4.tcp_congestion_control "bbr"
+    setProperty "${confFileName}" net.core.default_qdisc "fq_codel"
+
+    #sysctl --system
+    service procps start
+
+}
+# ----------  end of function tuneTheKernel  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  setProperty
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function setProperty () {
+    local fileName=$1
+    assertReadableFile "${fileName}" "fileName" || return 1
+    local propertyName=$2
+    assertNotEmpty "${propertyName}" "propertyName" || return 1
+    
+    local escapedPropertyName=$(echo "${propertyName}" | sed 's|\.|\\.|g')
+    local propertyValue=$3
+    if [[ -z "${propertyValue}" ]] ; then
+        #comment out
+        sed -i "s|^\([[:space:]]*${escapedPropertyName}[[:space:]]*=\)|#\1|g" "${fileName}"
+        return 0
+    fi
+
+    #uncomment or edit
+    sed -i "s|^[[:space:]]*#\?[[:space:]]*${escapedPropertyName}[[:space:]]*=.*$|${propertyName}=${propertyValue}|g" "${fileName}"
+    if ! grep --quiet "^[[:space:]]*${escapedPropertyName}[[:space:]]*=[[:space:]]*${propertyValue}[[:space:]]*$" "${fileName}" ; then
+        echo "${propertyName}=${propertyValue}" >> "${fileName}"
+    fi
+    return 0
+}
+# ----------  end of function setProperty  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateSimpleConfig
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function generateSimpleConfig () {
+    local serverDir=$1
+    assertNotEmpty "${serverDir}" "serverDir" || return 1
+    assertNotEmpty "${SERVER_CONFIG_FILE_NAME}" "SERVER_CONFIG_FILE_NAME" || return 1
+
+    local serverConfigFile="${serverDir}/${SERVER_CONFIG_FILE_NAME}"
+
+    if [[ -e "${serverConfigFile}" ]]; then
+        echo "${serverConfigFile} is already here!"
         return 1
     fi
 
-    cd "${programDirName}"
-    if [[ -e "./${SERVER_CONFIG_FILE_NAME}" ]]; then
-        echo "./${SERVER_CONFIG_FILE_NAME} is already here!"
-        return 1
-    fi
     #simple config file
-    cat <<EOF >"./${SERVER_CONFIG_FILE_NAME}"
+    cat <<EOF >"${serverConfigFile}"
 # Softether Configuration File
 # ----------------------------
 #
@@ -175,80 +262,52 @@ declare root
 }
 
 EOF
+
+}
+# ----------  end of function generateSimpleConfig  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateSystemDService
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function generateSystemDService () {
+    local serverDir=$1
+    assertNotEmpty "${serverDir}" "serverDir" || return 1
+
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_LINK}" "SYSTEMD_SERVICE_LINK" || return 1
     
-    chown -R root:root .
-    find . -type d -exec chmod u=rx,go= {} \;
-    find . -type f -exec chmod u=r,go= {} \;
-    chmod u+x ./vpnserver 
-    chmod u+x ./vpncmd
+    local serviceFileName=${serverDir}/${SYSTEMD_SERVICE_FILE}
+    checkFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
 
-    tuneTheKernel
-    cd -
-}	
-# ----------  end of function configureServer  ----------
+    cat <<EOF >"${serviceFileName}"
+[Unit]
+Description=SoftEther VPN Server
+After=network.target auditd.service
+ConditionPathExists=!${serverDir}/do_not_run
+[Service]
+Type=forking
+EnvironmentFile=-${serverDir}
+ExecStart=${serverDir}/${SERVER} start
+ExecStop=${serverDir}/${SERVER} stop
+KillMode=process
+Restart=on-failure
+# Hardening
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadOnlyDirectories=/
+ReadWriteDirectories=-${serverDir}
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_BROADCAST CAP_NET_RAW CAP_SYS_NICE CAP_SYS_ADMIN CAP_SETUID
+[Install]
+WantedBy=multi-user.target
+EOF
 
-
-#===  FUNCTION  ================================================================
-#          NAME:  tuneTheKernel
-#   DESCRIPTION:  
-#    PARAMETERS:
-#       RETURNS:
-#===============================================================================
-function tuneTheKernel () {
-    if [[ -z "${SYSCTL_FILE}" ]]; then
-        echo "SYSCTL_FILE is undefined." >&2
-        return 1
-    fi
-    [[ -e "${SYSCTL_FILE}" ]] || touch "${SYSCTL_FILE}"
-
-    # Act as router
-    setProperty "${SYSCTL_FILE}" net.ipv4.ip_forward 1
-    # Tune Kernel
-    setProperty "${SYSCTL_FILE}" net.ipv4.ip_local_port_range "1024 65535"
-    setProperty "${SYSCTL_FILE}" net.ipv4.tcp_congestion_control "bbr"
-    setProperty "${SYSCTL_FILE}" net.core.default_qdisc "fq_codel"
-    #sysctl --system
-    service procps start
 
 }
-# ----------  end of function tuneTheKernel  ----------
+# ----------  end of function generateSystemDService  ----------
 
-
-#===  FUNCTION  ================================================================
-#          NAME:  setProperty
-#   DESCRIPTION:  
-#    PARAMETERS:
-#       RETURNS:
-#===============================================================================
-function setProperty () {
-    local fileName=$1
-    if [[ -z "${fileName}" ]] ; then 
-        echo "fileName is undefined" >&2
-        return 1
-    fi
-    if [[ ! -r "${fileName}" ]] ; then 
-        echo "${fileName} is not readable" >&2
-        return 1
-    fi
-    local propertyName=$2
-    if [[ -z "${propertyName}" ]] ; then 
-        echo "propertyName is undefined" >&2
-        return 1
-    fi
-    local escapedPropertyName=$(echo "${propertyName}" | sed 's|\.|\\.|g')
-    local propertyValue=$3
-    if [[ -z "${propertyValue}" ]] ; then
-        #comment out
-        sed -i "s|^\([[:space:]]*${escapedPropertyName}[[:space:]]*=\)|#\1|g" "${fileName}"
-        return 0
-    fi
-
-    #uncomment or edit
-    sed -i "s|^[[:space:]]*#\?[[:space:]]*${escapedPropertyName}[[:space:]]*=.*$|${propertyName}=${propertyValue}|g" "${fileName}"
-    if ! grep --quiet "^[[:space:]]*${escapedPropertyName}[[:space:]]*=[[:space:]]*${propertyValue}[[:space:]]*$" "${fileName}" ; then
-        echo "${propertyName}=${propertyValue}" >> "${fileName}"
-    fi
-    return 0
-}
-# ----------  end of function setProperty  ----------
 
