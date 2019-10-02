@@ -53,6 +53,7 @@ function stopTheScript () {
 # ----------  end of function stopTheScript  ----------
 
 readonly WORK_DIRECTORY=$(dirname "$0")
+readonly UTIL=${WORK_DIRECTORY}/util.sh
 readonly LIBRARY=${WORK_DIRECTORY}/function.sh
 readonly ENVIRONMENT=${WORK_DIRECTORY}/environment.sh
 
@@ -62,6 +63,9 @@ readonly ARCHIVE_FILE_NAME=${ARCHIVE_DIR_NAME}/sourceArchive.tar.gz
 
 
 #include library
+[[ -r "${UTIL}" ]] || stopTheScript "There is no ${UTIL} file." 2
+source "${UTIL}"
+
 [[ -r "${LIBRARY}" ]] || stopTheScript "There is no ${LIBRARY} file." 2
 source "${LIBRARY}"
 
