@@ -17,6 +17,11 @@
 #      REVISION:  ---
 #===============================================================================
 
+if [[ -n "${_UTIL_LIBRARY_NAME}" ]]; then
+    return 0
+fi
+readonly _UTIL_LIBRARY_NAME="util.sh"
+
 
 #===  FUNCTION  ================================================================
 #          NAME:  assertNotEmpty
@@ -26,7 +31,7 @@
 #===============================================================================
 function assertNotEmpty () {
     if [[ -z "$1" ]]; then
-        [[ -n "$2" ]] && echo "$2 is undefined" >&2
+        [[ -n "$2" ]] && echo "$(getWhereStr): $2 is undefined" >&2
         return 1
     fi
     return 0
@@ -66,4 +71,22 @@ function assertExistingDirectory () {
     return 0
 }
 # ----------  end of function assertExistingDirectory  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  getWhereStr
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function getWhereStr () {
+    if [[ "${#FUNCNAME[@]}" -le 3 ]]; then
+        #it was called from main 
+        printf '%s' "${BASH_SOURCE[-1]}:${BASH_LINENO[-2]}" 
+    else
+        printf '%s' "${BASH_SOURCE[2]}.${FUNCNAME[2]}:${BASH_LINENO[1]}" #getWhereStr/assser*/functionName
+    fi
+}
+# ----------  end of function getWhereStr  ----------
+
 
