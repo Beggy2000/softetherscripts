@@ -181,17 +181,17 @@ function configureServer () {
 
     cd "${serverDirName}"
     
-    generateSimpleConfig "${serverDirName}"   || return 1
+    generateInitialServerConfig "${serverDirName}"   || return 1
     generateAdminIpConfig "${serverDirName}"  || return 1
     tuneTheKernel "${serverDirName}"          || return 1
-    generateSystemDService "${serverDirName}" || return 1
+    generateServerService "${serverDirName}" || return 1
 
     chown -R root:root .
     find . -type d -exec chmod u=rwx,go= {} \;
     find . -type f -exec chmod u=r,go= {} \;
     chmod u+x "./${SERVER}" 
     chmod u+x "./${CONFIGURATOR}"
-    runInitScript "${serverDirName}" || return 1
+    runServerInitScript "${serverDirName}" || return 1
 
     # Reload service
     systemctl daemon-reload
@@ -310,12 +310,12 @@ function setProperty () {
 
 
 #===  FUNCTION  ================================================================
-#          NAME:  generateSimpleConfig
+#          NAME:  generateInitialServerConfig
 #   DESCRIPTION:  
 #    PARAMETERS:
 #       RETURNS:
 #===============================================================================
-function generateSimpleConfig () {
+function generateInitialServerConfig () {
     local serverDirName="$1"
     assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
@@ -364,16 +364,16 @@ declare root
 EOF
 
 }
-# ----------  end of function generateSimpleConfig  ----------
+# ----------  end of function generateInitialServerConfig  ----------
 
 
 #===  FUNCTION  ================================================================
-#          NAME:  generateSystemDService
+#          NAME:  generateServerService
 #   DESCRIPTION:  
 #    PARAMETERS:
 #       RETURNS:
 #===============================================================================
-function generateSystemDService () {
+function generateServerService () {
     local serverDirName="$1"
     assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
@@ -383,6 +383,7 @@ function generateSystemDService () {
     local serviceFileName="${serverDirName}/${SYSTEMD_SERVICE_FILE}"
     createFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
 
+    #get last version here: https://github.com/SoftEtherVPN/SoftEtherVPN/blob/master/systemd/softether-vpnserver.service
     cat <<EOF >"${serviceFileName}"
 [Unit]
 Description=SoftEther VPN Server
@@ -408,7 +409,7 @@ EOF
 
 
 }
-# ----------  end of function generateSystemDService  ----------
+# ----------  end of function generateServerService  ----------
 
 
 #===  FUNCTION  ================================================================
@@ -483,12 +484,12 @@ function runConfigatorScript () {
 # ----------  end of function runConfigatorScript  ----------
 
 #===  FUNCTION  ================================================================
-#          NAME:  runInitScript
+#          NAME:  runServerInitScript
 #   DESCRIPTION:  
 #    PARAMETERS:
 #       RETURNS:
 #===============================================================================
-function runInitScript () {
+function runServerInitScript () {
     assertNotEmpty "${HUB_NAME}" "HUB_NAME" || return 1
     local hubPassword=""
     read -s -p "${HUB_NAME} hub password: " hubPassword
@@ -510,7 +511,7 @@ EOF
 )"
     runConfigatorScript "$1" "${serverInitScript}"   
 }
-# ----------  end of function runInitScript  ----------
+# ----------  end of function runServerInitScript  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  uninstallServer
@@ -655,6 +656,10 @@ function packClientScript () {
     cat <<EOF >"${environmentFile}"
 readonly ARCHITECTURE="${ARCHITECTURE}"
 readonly DESTINATION_DIR="${DESTINATION_DIR}"
+readonly SYSTEMD_SERVICE_FILE="vpnclient.service"
+
+readonly SYSCTL_FILE="${SYSCTL_FILE}"
+readonly SYSCTL_LINK="/etc/sysctl.d/50-vpnclient.conf"
 
 readonly SERVER_EXTERNAL_IP="${SERVER_EXTERNAL_IP}"
 readonly SERVER_PORT="443"
@@ -673,6 +678,94 @@ EOF
     rm "${environmentFile}"
 }
 # ----------  end of function packClientScript  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateInitialClientConfig
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function generateInitialClientConfig () {
+    echo "generateInitialClientConfig"
+}	
+
+# ----------  end of function generateInitialClientConfig  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateClientService
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function generateClientService () {
+    echo "generateClientService"
+}	
+# ----------  end of function generateClientService  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  runClientInitScript
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function runClientInitScript () {
+    echo "runClientInitScript"
+}	
+# ----------  end of function runClientInitScript  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  configureClient
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function configureClient () {
+    return 0
+    #RemoteDisable
+    #KeepDisable
+    
+    #net.ipv4.ip_forward=1
+
+    #systemctl script
+
+    #Create a virtual interface to connect to the VPN server.
+    #Create an VPN client account using the following command.
+    #Set User Authentication Type of VPN Connection Setting to Client Certificate Authentication
+    #AccountStartupSet
+
+    #netplan script
+    assertNotEmpty "${CLIENT}" "CLIENT" || return 1
+    assertNotEmpty "${CONFIGURATOR}" "CONFIGURATOR" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+
+    generateInitialClientConfig "${clientDirName}"   || return 1
+    tuneTheKernel "${clientDirName}"          || return 1
+    generateClientService "${clientDirName}" || return 1
+
+    cd "${clientDirName}"
+    
+    chown -R root:root .
+    find . -type d -exec chmod u=rwx,go= {} \;
+    find . -type f -exec chmod u=r,go= {} \;
+    chmod u+x "./${CLIENT}" 
+    chmod u+x "./${CONFIGURATOR}"
+    runClientInitScript "${serverDirName}" || return 1
+
+    # Reload service
+    systemctl daemon-reload
+    # Enable service
+    systemctl enable "${SYSTEMD_SERVICE_FILE}"
+    # Start service
+    systemctl restart "${SYSTEMD_SERVICE_FILE}"
+    
+    cd -
+}	
+# ----------  end of function configureClient  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  onExit
