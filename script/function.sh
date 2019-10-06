@@ -95,6 +95,18 @@ function checkIfServerIsStarted () {
 # ----------  end of function checkIfServerIsStarted  ----------
 
 #===  FUNCTION  ================================================================
+#          NAME:  checkIfClientIsStarted
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function checkIfClientIsStarted () {
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+    systemctl is-active --quiet "${SYSTEMD_SERVICE_FILE}"
+}
+# ----------  end of function checkIfClientIsStarted  ----------
+
+#===  FUNCTION  ================================================================
 #          NAME:  updateTheSystem
 #   DESCRIPTION:  
 #    PARAMETERS:  
@@ -179,18 +191,16 @@ function configureServer () {
     local serverDirName="$1"
     assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
-    cd "${serverDirName}"
-    
-    generateInitialServerConfig "${serverDirName}"   || return 1
-    generateAdminIpConfig "${serverDirName}"  || return 1
-    tuneTheKernel "${serverDirName}"          || return 1
-    generateServerService "${serverDirName}" || return 1
+    generateInitialServerConfig "${serverDirName}" || return 1
+    generateAdminIpConfig "${serverDirName}"       || return 1
+    tuneTheKernel "${serverDirName}" "${SERVER}"   || return 1
+    generateServerService "${serverDirName}"       || return 1
 
-    chown -R root:root .
-    find . -type d -exec chmod u=rwx,go= {} \;
-    find . -type f -exec chmod u=r,go= {} \;
-    chmod u+x "./${SERVER}" 
-    chmod u+x "./${CONFIGURATOR}"
+    chown -R root:root "${serverDirName}"
+    find "${serverDirName}" -type d -exec chmod u=rwx,go= {} \;
+    find "${serverDirName}" -type f -exec chmod u=r,go= {} \;
+    chmod u+x "${serverDirName}/${SERVER}" 
+    chmod u+x "${serverDirName}/${CONFIGURATOR}"
     runServerInitScript "${serverDirName}" || return 1
 
     # Reload service
@@ -199,8 +209,6 @@ function configureServer () {
     systemctl enable "${SYSTEMD_SERVICE_FILE}"
     # Start service
     systemctl restart "${SYSTEMD_SERVICE_FILE}"
-    
-    cd -
 }	
 # ----------  end of function configureServer  ----------
 
@@ -256,25 +264,32 @@ function createFileAndLink () {
 #       RETURNS:
 #===============================================================================
 function tuneTheKernel () {
-    local serverDirName="$1"
-    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
+    local programmDirName="$1"
+    assertExistingDirectory "${programmDirName}" "programmDirName" || return 1
+
+    local programmType="$2"
+    if [[ "${programmType}" != "${SERVER}" && "${programmType}" != "${CLIENT}" ]]; then
+        echo "\"${programmType}\" is unknown programm type" >&2
+        return 1
+    fi
 
     assertNotEmpty "${SYSCTL_FILE}" "SYSCTL_FILE" || return 1
     assertNotEmpty "${SYSCTL_LINK}" "SYSCTL_LINK" || return 1
     
-    local sysctlFileName="${serverDirName}/${SYSCTL_FILE}"
+    local sysctlFileName="${programmDirName}/${SYSCTL_FILE}"
     createFileAndLink "${sysctlFileName}" "${SYSCTL_LINK}" || return 1
 
     # Act as router
     setProperty "${sysctlFileName}" net.ipv4.ip_forward 1
-    # Tune Kernel
-    setProperty "${sysctlFileName}" net.ipv4.ip_local_port_range "1024 65535"
-    setProperty "${sysctlFileName}" net.ipv4.tcp_congestion_control "bbr"
-    setProperty "${sysctlFileName}" net.core.default_qdisc "fq_codel"
+    if [[ "${programmType}" == "${SERVER}" ]]; then
+        # Tune Kernel
+        setProperty "${sysctlFileName}" net.ipv4.ip_local_port_range "1024 65535"
+        setProperty "${sysctlFileName}" net.ipv4.tcp_congestion_control "bbr"
+        setProperty "${sysctlFileName}" net.core.default_qdisc "fq_codel"
+    fi
 
     #sysctl --system
     service procps start
-
 }
 # ----------  end of function tuneTheKernel  ----------
 
@@ -383,19 +398,22 @@ function generateServerService () {
     local serviceFileName="${serverDirName}/${SYSTEMD_SERVICE_FILE}"
     createFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
 
-    #get last version here: https://github.com/SoftEtherVPN/SoftEtherVPN/blob/master/systemd/softether-vpnserver.service
+    #base on: https://github.com/SoftEtherVPN/SoftEtherVPN/blob/master/systemd/softether-vpnserver.service
     cat <<EOF >"${serviceFileName}"
 [Unit]
 Description=SoftEther VPN Server
 After=network.target auditd.service
 ConditionPathExists=!${serverDirName}/do_not_run
+
 [Service]
 Type=forking
+TasksMax=16777216
 EnvironmentFile=-${serverDirName}
 ExecStart=${serverDirName}/${SERVER} start
 ExecStop=${serverDirName}/${SERVER} stop
 KillMode=process
 Restart=on-failure
+
 # Hardening
 PrivateTmp=yes
 ProtectHome=yes
@@ -403,11 +421,10 @@ ProtectSystem=full
 ReadOnlyDirectories=/
 ReadWriteDirectories=-${serverDirName}
 CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_BROADCAST CAP_NET_RAW CAP_SYS_NICE CAP_SYS_ADMIN CAP_SETUID
+
 [Install]
 WantedBy=multi-user.target
 EOF
-
-
 }
 # ----------  end of function generateServerService  ----------
 
@@ -443,12 +460,12 @@ EOF
 
 
 #===  FUNCTION  ================================================================
-#          NAME:  runConfigatorScript
+#          NAME:  runServerConfigScript
 #   DESCRIPTION:  
 #    PARAMETERS:
 #       RETURNS:
 #===============================================================================
-function runConfigatorScript () {
+function runServerConfigScript () {
     local serverDirName="$1"
     assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
@@ -481,7 +498,46 @@ function runConfigatorScript () {
         sleep 2
     fi
 }
-# ----------  end of function runConfigatorScript  ----------
+# ----------  end of function runServerConfigScript  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  runClientConfigScript
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function runClientConfigScript () {
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+
+    local scriptText="$2"
+    [[ -z "${scriptText}" ]] && return 0 #nothing to do
+
+    local configuratorCommand="${clientDirName}/${CONFIGURATOR}"
+    assertExecutableFile "${configuratorCommand}" "configuratorCommand" || return 1
+
+    local clientIsAlreadyStarted="false"
+    checkIfClientIsStarted && clientIsAlreadyStarted="true"
+
+    if [[ "${clientIsAlreadyStarted}" == "false" ]]; then
+        local clientCommand="${clientDirName}/${CLIENT}"
+        assertExecutableFile "${clientCommand}" "clientCommand" || return 1
+        "${clientCommand}" start
+        sleep 2
+    fi
+    
+    initTemporaryDir
+    local scriptFile=$(mktemp --tmpdir=${TEMPORARY_DIR})
+    printf '%s\n' "${scriptText}" > "${scriptFile}"
+    "${configuratorCommand}" localhost /CLIENT /IN:"${scriptFile}"
+    rm "${scriptFile}"
+    
+    if [[ "${clientIsAlreadyStarted}" == "false" ]]; then
+        "${clientCommand}" stop
+        sleep 2
+    fi
+}
+# ----------  end of function runClientConfigScript  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  runServerInitScript
@@ -509,7 +565,7 @@ function runServerInitScript () {
         SecureNatEnable
 EOF
 )"
-    runConfigatorScript "$1" "${serverInitScript}"   
+    runServerConfigScript "$1" "${serverInitScript}"   
 }
 # ----------  end of function runServerInitScript  ----------
 
@@ -570,7 +626,7 @@ function checkIfUserExists () {
 EOF
 )"
     
-    local userList="$(runConfigatorScript "$1" "${userListScript}" 2>&1 | sed -n 's/^User Name[[:space:]]*|//gp')"
+    local userList="$(runServerConfigScript "$1" "${userListScript}" 2>&1 | sed -n 's/^User Name[[:space:]]*|//gp')"
     echo "${userList}" | grep --quiet "${userName}"
 }
 # ----------  end of function checkIfUserExists  ----------
@@ -599,7 +655,7 @@ function createUserCertificate () {
 EOF
 )"
     
-    runConfigatorScript "$1" "${createUserCertificateScript}"
+    runServerConfigScript "$1" "${createUserCertificateScript}"
     return 0
 }
 # ----------  end of function createUserCertificate  ----------
@@ -626,7 +682,7 @@ function createUserOnServer () {
 EOF
 )"
 
-    runConfigatorScript "$1" "${addUserScript}"
+    runServerConfigScript "$1" "${addUserScript}"
 
 }
 # ----------  end of function createUserOnServer  ----------
@@ -657,18 +713,25 @@ function packClientScript () {
 readonly ARCHITECTURE="${ARCHITECTURE}"
 readonly DESTINATION_DIR="${DESTINATION_DIR}"
 readonly SYSTEMD_SERVICE_FILE="vpnclient.service"
+readonly SYSTEMD_SERVICE_LINK="/lib/systemd/system/vpnclient.service"
 
+readonly CLIENT_CONFIG_FILE_NAME="vpn_client.config"
 readonly SYSCTL_FILE="${SYSCTL_FILE}"
 readonly SYSCTL_LINK="/etc/sysctl.d/50-vpnclient.conf"
+readonly NETWORKD_DISPATCHER_SCRIPT="vpnOnOff.sh"
 
 readonly SERVER_EXTERNAL_IP="${SERVER_EXTERNAL_IP}"
 readonly SERVER_PORT="443"
 readonly HUB_NAME="beggyHub"
+readonly IFACE_NAME="vpn"
 
 readonly CLIENT="vpnclient"
 readonly CONFIGURATOR="vpncmd"
 
 readonly USER_NAME="${userName}"
+readonly USER_CERT_FILE="$(basename "${certificateFileName}")"
+readonly USER_KEY_FILE="$(basename "${keyFileName}")"
+
 EOF
     tar --create --verbose --bzip2 --file="${archiveFile}" \
         --directory="${WORK_DIRECTORY}" "${CLIENT_INSTALL_SCRIPT}" "$(basename "${LIBRARY}")" "$(basename "${UTIL}")" \
@@ -686,7 +749,35 @@ EOF
 #       RETURNS:  
 #===============================================================================
 function generateInitialClientConfig () {
-    echo "generateInitialClientConfig"
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+
+    assertNotEmpty "${CLIENT_CONFIG_FILE_NAME}" "CLIENT_CONFIG_FILE_NAME" || return 1
+
+    local clientConfigFile="${clientDirName}/${CLIENT_CONFIG_FILE_NAME}"
+
+    if [[ -e "${clientConfigFile}" ]]; then
+        echo "${clientConfigFile} is already here!" >&2
+        return 1
+    fi
+
+    #simple config file
+    cat <<EOF >"${clientConfigFile}"
+# You may edit this file when the VPN Server / Client / Bridge program is not running.
+# 
+# In prior to edit this file manually by your text editor,
+# shutdown the VPN Server / Client / Bridge background service.
+# Otherwise, all changes will be lost.
+# 
+declare root
+{
+	declare Config
+	{
+		bool AllowRemoteConfig false
+		bool UseKeepConnect false
+	}
+}
+EOF
 }	
 
 # ----------  end of function generateInitialClientConfig  ----------
@@ -699,7 +790,41 @@ function generateInitialClientConfig () {
 #       RETURNS:  
 #===============================================================================
 function generateClientService () {
-    echo "generateClientService"
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_LINK}" "SYSTEMD_SERVICE_LINK" || return 1
+    
+    local serviceFileName="${clientDirName}/${SYSTEMD_SERVICE_FILE}"
+    createFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
+
+    #base on: https://github.com/SoftEtherVPN/SoftEtherVPN/blob/master/systemd/softether-vpnclient.service
+    cat <<EOF >"${serviceFileName}"
+[Unit]
+Description=SoftEther VPN Client
+After=network.target auditd.service
+ConditionPathExists=!${clientDirName}/do_not_run
+
+[Service]
+Type=forking
+EnvironmentFile=-${clientDirName}
+ExecStart=${clientDirName}/${CLIENT} start
+ExecStop=${clientDirName}/${CLIENT} stop
+KillMode=process
+Restart=on-failure
+
+# Hardening
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=full
+ReadOnlyDirectories=/
+ReadWriteDirectories=-${clientDirName}
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_BROADCAST CAP_NET_RAW CAP_SYS_NICE CAP_SYS_ADMIN CAP_SETUID
+
+[Install]
+WantedBy=multi-user.target
+EOF
 }	
 # ----------  end of function generateClientService  ----------
 
@@ -711,9 +836,73 @@ function generateClientService () {
 #       RETURNS:  
 #===============================================================================
 function runClientInitScript () {
-    echo "runClientInitScript"
+    assertNotEmpty "${IFACE_NAME}" "IFACE_NAME" || return 1
+    assertNotEmpty "${USER_NAME}" "USER_NAME" || return 1
+    assertNotEmpty "${SERVER_EXTERNAL_IP}" "SERVER_EXTERNAL_IP" || return 1
+    assertNotEmpty "${SERVER_PORT}" "SERVER_PORT" || return 1
+    assertNotEmpty "${HUB_NAME}" "HUB_NAME" || return 1
+    assertNotEmpty "${USER_CERT_FILE}" "USER_CERT_FILE" || return 1
+    assertNotEmpty "${USER_KEY_FILE}" "USER_KEY_FILE" || return 1
+
+    #Create a virtual interface to connect to the VPN server.
+    #Create an VPN client account using the following command.
+    #Set User Authentication Type of VPN Connection Setting to Client Certificate Authentication
+    #AccountStartupSet
+    
+    local initScript="$(cat <<EOF
+NicCreate ${IFACE_NAME}
+AccountCreate ${USER_NAME} /SERVER:${SERVER_EXTERNAL_IP}:${SERVER_PORT} /HUB:${HUB_NAME} /USERNAME:${USER_NAME} /NICNAME:${IFACE_NAME}
+AccountCertSet ${USER_NAME} /LOADCERT:${USER_CERT_FILE} /LOADKEY:${USER_KEY_FILE}
+AccountStartupSet ${USER_NAME}
+EOF
+)"
+    
+    runClientConfigScript "$1" "${initScript}"
+
 }	
 # ----------  end of function runClientInitScript  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateNetworkdDispatcherScript
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function generateNetworkdDispatcherScript () {
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+
+    assertNotExitingFile "${NETWORKD_DISPATCHER_SCRIPT}" "NETWORKD_DISPATCHER_SCRIPT" || return 1
+    assertNotEmpty "${IFACE_NAME}" "IFACE_NAME" || return 1
+
+    local networkScript="${clientDirName}/${NETWORKD_DISPATCHER_SCRIPT}"
+
+    cat <<EOF >"${networkScript}"
+[[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
+
+if [[ "\${STATE}" == "off" ]] ; then
+    #restore
+    netplan apply
+    exit 0
+fi
+
+if [[ "\${STATE}" == "routable" ]] ; then
+    read  -a routeStr < <(route -n | grep '^0.0.0.0') 
+    gatewayIp=\${routeStr[1]}
+    gatewayInterface=\${routeStr[7]}
+
+    # add a route to the VPN server’s IP address via old default route
+    route add -host beggyExternal gw \${gatewayIp}
+    # delete the default route for this interface
+    route del default dev \${gatewayInterface}
+    exit 0
+fi
+EOF
+    chmod u=rx,go= "${networkScript}"
+    createFileAndLink "${networkScript}" "/etc/networkd-dispatcher/off.d/50-restoreDefaultRoute.sh"
+    createFileAndLink "${networkScript}" "/etc/networkd-dispatcher/routable.d/50-restoreDefaultRoute.sh"
+}	
+# ----------  end of function generateNetworkdDispatcherScript  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  configureClient
@@ -722,38 +911,24 @@ function runClientInitScript () {
 #       RETURNS:  
 #===============================================================================
 function configureClient () {
-    return 0
-    #RemoteDisable
-    #KeepDisable
-    
-    #net.ipv4.ip_forward=1
-
-    #systemctl script
-
-    #Create a virtual interface to connect to the VPN server.
-    #Create an VPN client account using the following command.
-    #Set User Authentication Type of VPN Connection Setting to Client Certificate Authentication
-    #AccountStartupSet
-
-    #netplan script
     assertNotEmpty "${CLIENT}" "CLIENT" || return 1
     assertNotEmpty "${CONFIGURATOR}" "CONFIGURATOR" || return 1
     assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
-
+    
     local clientDirName="$1"
     assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
 
-    generateInitialClientConfig "${clientDirName}"   || return 1
-    tuneTheKernel "${clientDirName}"          || return 1
+    generateInitialClientConfig "${clientDirName}" || return 1
+    tuneTheKernel "${clientDirName}" "${CLIENT}"   || return 1
     generateClientService "${clientDirName}" || return 1
 
-    cd "${clientDirName}"
-    
-    chown -R root:root .
-    find . -type d -exec chmod u=rwx,go= {} \;
-    find . -type f -exec chmod u=r,go= {} \;
-    chmod u+x "./${CLIENT}" 
-    chmod u+x "./${CONFIGURATOR}"
+    generateNetworkdDispatcherScript "${clientDirName}" || return 1
+
+    chown -R root:root "${clientDirName}"
+    find "${clientDirName}" -type d -exec chmod u=rwx,go= {} \;
+    find "${clientDirName}" -type f -exec chmod u=r,go= {} \;
+    chmod u+x "${clientDirName}/${CLIENT}" 
+    chmod u+x "${clientDirName}/${CONFIGURATOR}"
     runClientInitScript "${serverDirName}" || return 1
 
     # Reload service
@@ -763,7 +938,6 @@ function configureClient () {
     # Start service
     systemctl restart "${SYSTEMD_SERVICE_FILE}"
     
-    cd -
 }	
 # ----------  end of function configureClient  ----------
 
