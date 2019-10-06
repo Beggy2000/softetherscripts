@@ -27,4 +27,5 @@ readonly USER_EXPIRES=""
 readonly USER_SERIAL=""
 
 readonly CLIENT_INSTALL_SCRIPT="installClient.sh"
+readonly CLIENT_UNINSTALL_SCRIPT="uninstallClient.sh"
 readonly CLIENT_ARCHIVE_SUFFIX="_VPNClient.tar.bz2"
