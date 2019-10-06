@@ -19,7 +19,7 @@
 
 source "$(dirname "$0")/function.sh" || { echo "Critical error: there is no library $(dirname "$0")/function.sh" >&2 ; exit 1; }
 
-checkIfRoot || stopTheScript "You should start the script as root (sudo)." 1
+checkIfRoot || stopTheScript "You must start the script as root (sudo)." 1
 
 initTemporaryDir
 readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/sourceArchive.tar.gz
@@ -32,8 +32,5 @@ unpackAndCompile "${SERVER}" "${ARCHIVE_FILE_NAME}" "${DESTINATION_DIR}" || stop
 
 declare programDirName="${DESTINATION_DIR}/${SERVER}"
 configureServer "${programDirName}"
-
-#configureNetwork
-#configureSystemctl
 
 stopTheScript "Completed" 0

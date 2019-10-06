@@ -611,6 +611,58 @@ function uninstallServer () {
 # ----------  end of function uninstallServer  ----------
 
 #===  FUNCTION  ================================================================
+#          NAME:  uninstallClient
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function uninstallClient () {
+
+    local clientDirName="$1"
+    assertNotEmpty "${clientDirName}" "clientDirName" || return 1
+    assertNotEmpty "${CLIENT}" "CLIENT" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+
+    local clientFile="${clientDirName}/${CLIENT}"
+    [[ -x "${clientFile}" ]] && "${clientFile}" stop
+
+    # Disable service
+    systemctl disable "${SYSTEMD_SERVICE_FILE}"
+    # Stop service
+    systemctl stop "${SYSTEMD_SERVICE_FILE}"
+    # Reload other services
+    systemctl daemon-reload
+
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_LINK}" "SYSTEMD_SERVICE_LINK" || return 1
+    local serviceFileName="${clientDirName}/${SYSTEMD_SERVICE_FILE}"
+    checkFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
+    [[ -e "${serviceFileName}" ]] && rm -v "${serviceFileName}"
+    [[ -L "${SYSTEMD_SERVICE_LINK}" ]] && rm -v "${SYSTEMD_SERVICE_LINK}"
+
+    assertNotEmpty "${SYSCTL_FILE}" "SYSCTL_FILE" || return 1
+    assertNotEmpty "${SYSCTL_LINK}" "SYSCTL_LINK" || return 1
+    local sysctlFileName="${clientDirName}/${SYSCTL_FILE}"
+    checkFileAndLink "${sysctlFileName}" "${SYSCTL_LINK}" || return 1
+    [[ -e "${sysctlFileName}" ]] && rm -v "${sysctlFileName}"
+    [[ -L "${SYSCTL_LINK}" ]] && rm -v "${SYSCTL_LINK}"
+    service procps start
+
+    assertNotEmpty "${NETWORKD_DISPATCHER_OFF_LINK}" "NETWORKD_DISPATCHER_OFF_LINK" || return 1
+    local networkScript="${clientDirName}/${NETWORKD_DISPATCHER_SCRIPT}"
+    checkFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_OFF_LINK}" || return 1
+    [[ -L "${NETWORKD_DISPATCHER_OFF_LINK}" ]] && rm -v "${NETWORKD_DISPATCHER_OFF_LINK}"
+    
+    assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" "NETWORKD_DISPATCHER_ROUTABLE_LINK" || return 1
+    checkFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" || return 1
+    [[ -L "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" ]] && rm -v "${NETWORKD_DISPATCHER_ROUTABLE_LINK}"
+    [[ -e "${networkScript}" ]] && rm -v "${networkScript}"
+
+    [[ -e "${clientDirName}" ]] && rm -rvf "${clientDirName}"
+}	
+# ----------  end of function uninstallClient  ----------
+
+#===  FUNCTION  ================================================================
 #          NAME:  checkIfUserExists
 #   DESCRIPTION:  
 #    PARAMETERS:
@@ -707,6 +759,9 @@ function packClientScript () {
     local archiveFile="${WORK_DIRECTORY}/${userName}${CLIENT_ARCHIVE_SUFFIX}"
     assertNotExitingFile "${archiveFile}" "archiveFile" ||  return 1
 
+    assertReadableFile "${CLIENT_INSTALL_SCRIPT}" "CLIENT_INSTALL_SCRIPT" || return 1
+    assertReadableFile "${CLIENT_UNINSTALL_SCRIPT}" "CLIENT_UNINSTALL_SCRIPT" || return 1
+
     initTemporaryDir
     local environmentFile="${TEMPORARY_DIR}/environment.sh"
     cat <<EOF >"${environmentFile}"
@@ -719,6 +774,9 @@ readonly CLIENT_CONFIG_FILE_NAME="vpn_client.config"
 readonly SYSCTL_FILE="${SYSCTL_FILE}"
 readonly SYSCTL_LINK="/etc/sysctl.d/50-vpnclient.conf"
 readonly NETWORKD_DISPATCHER_SCRIPT="vpnOnOff.sh"
+readonly NETWORKD_DISPATCHER_OFF_LINK="/etc/networkd-dispatcher/off.d/50-restoreDefaultRoute.sh"
+readonly NETWORKD_DISPATCHER_ROUTABLE_LINK="/etc/networkd-dispatcher/routable.d/50-restoreDefaultRoute.sh"
+
 
 readonly SERVER_EXTERNAL_IP="${SERVER_EXTERNAL_IP}"
 readonly SERVER_PORT="443"
@@ -734,7 +792,7 @@ readonly USER_KEY_FILE="$(basename "${keyFileName}")"
 
 EOF
     tar --create --verbose --bzip2 --file="${archiveFile}" \
-        --directory="${WORK_DIRECTORY}" "${CLIENT_INSTALL_SCRIPT}" "$(basename "${LIBRARY}")" "$(basename "${UTIL}")" \
+        --directory="${WORK_DIRECTORY}" "${CLIENT_INSTALL_SCRIPT}" "${CLIENT_UNINSTALL_SCRIPT}" "$(basename "${LIBRARY}")" "$(basename "${UTIL}")" \
         --directory="$(dirname "${environmentFile}")" "$(basename "${environmentFile}")" \
         --directory="$(dirname "${certificateFileName}")" "$(basename "${certificateFileName}")" \
         --directory="$(dirname "${keyFileName}")" "$(basename "${keyFileName}")"
@@ -874,10 +932,15 @@ function generateNetworkdDispatcherScript () {
 
     assertNotExitingFile "${NETWORKD_DISPATCHER_SCRIPT}" "NETWORKD_DISPATCHER_SCRIPT" || return 1
     assertNotEmpty "${IFACE_NAME}" "IFACE_NAME" || return 1
+    assertNotEmpty "${SERVER_EXTERNAL_IP}" "SERVER_EXTERNAL_IP" || return 1
+    assertNotEmpty "${NETWORKD_DISPATCHER_OFF_LINK}" "NETWORKD_DISPATCHER_OFF_LINK" || return 1
+    assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" "NETWORKD_DISPATCHER_ROUTABLE_LINK" || return 1
 
     local networkScript="${clientDirName}/${NETWORKD_DISPATCHER_SCRIPT}"
 
     cat <<EOF >"${networkScript}"
+#!/bin/bash - 
+
 [[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
 
 if [[ "\${STATE}" == "off" ]] ; then
@@ -892,15 +955,15 @@ if [[ "\${STATE}" == "routable" ]] ; then
     gatewayInterface=\${routeStr[7]}
 
     # add a route to the VPN server’s IP address via old default route
-    route add -host beggyExternal gw \${gatewayIp}
+    route add -host ${SERVER_EXTERNAL_IP} gw \${gatewayIp}
     # delete the default route for this interface
     route del default dev \${gatewayInterface}
     exit 0
 fi
 EOF
     chmod u=rx,go= "${networkScript}"
-    createFileAndLink "${networkScript}" "/etc/networkd-dispatcher/off.d/50-restoreDefaultRoute.sh"
-    createFileAndLink "${networkScript}" "/etc/networkd-dispatcher/routable.d/50-restoreDefaultRoute.sh"
+    createFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_OFF_LINK}"
+    createFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_ROUTABLE_LINK}"
 }	
 # ----------  end of function generateNetworkdDispatcherScript  ----------
 
@@ -922,14 +985,14 @@ function configureClient () {
     tuneTheKernel "${clientDirName}" "${CLIENT}"   || return 1
     generateClientService "${clientDirName}" || return 1
 
-    generateNetworkdDispatcherScript "${clientDirName}" || return 1
-
     chown -R root:root "${clientDirName}"
     find "${clientDirName}" -type d -exec chmod u=rwx,go= {} \;
     find "${clientDirName}" -type f -exec chmod u=r,go= {} \;
     chmod u+x "${clientDirName}/${CLIENT}" 
     chmod u+x "${clientDirName}/${CONFIGURATOR}"
-    runClientInitScript "${serverDirName}" || return 1
+    runClientInitScript "${clientDirName}" || return 1
+
+    generateNetworkdDispatcherScript "${clientDirName}" || return 1
 
     # Reload service
     systemctl daemon-reload

@@ -17,6 +17,20 @@
 #      REVISION:  ---
 #===============================================================================
 
-set -o nounset                              # Treat unset variables as an error
+source "$(dirname "$0")/function.sh" || { echo "Critical error: there is no library $(dirname "$0")/function.sh" >&2 ; exit 1; }
 
+checkIfRoot || stopTheScript "You must start the script as root (sudo)." 1
 
+initTemporaryDir
+readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/sourceArchive.tar.gz
+
+updateTheSystem
+
+getLastRTM "${CLIENT}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTheScript "" 1
+
+unpackAndCompile "${CLIENT}" "${ARCHIVE_FILE_NAME}" "${DESTINATION_DIR}" || stopTheScript "" 1
+
+declare programDirName="${DESTINATION_DIR}/${CLIENT}"
+configureClient "${programDirName}"
+
+stopTheScript "Completed" 0
