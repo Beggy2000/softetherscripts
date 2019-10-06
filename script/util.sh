@@ -48,13 +48,46 @@ function assertNotEmpty () {
 function assertReadableFile () {
     assertNotEmpty "$1" "$2" || return 1
     if [[ ! -r "$1" ]]; then
-        [[ -n "$2" ]] && echo "$2 is not readable" >&2
+        [[ -n "$2" ]] && echo "$2($1) is not readable" >&2
         return 1
     fi
     return 0
 }
 # ----------  end of function assertReadableFile  ----------
 
+
+#===  FUNCTION  ================================================================
+#          NAME:  assertExecutableFile
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function assertExecutableFile () {
+    assertNotEmpty "$1" "$2" || return 1
+    if [[ ! -x "$1" ]]; then
+        [[ -n "$2" ]] && echo "$2($1) is not executable" >&2
+        return 1
+    fi
+    return 0
+}
+# ----------  end of function assertExecutableFile  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  assertNotExitingFile
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function assertNotExitingFile () {
+    assertNotEmpty "$1" "$2" || return 1
+    if [[ -e "$1" ]]; then
+        [[ -n "$2" ]] && echo "$2($1) exists - please choose another one or remove it" >&2
+        return 1
+    fi
+    return 0
+
+}
+# ----------  end of function assertNotExitingFile  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  assertExistingDirectory
@@ -65,7 +98,7 @@ function assertReadableFile () {
 function assertExistingDirectory () {
     assertNotEmpty "$1" "$2" || return 1
     if [[ ! -d "$1" ]]; then
-        [[ -n "$2" ]] && echo "$2 is not directory" >&2
+        [[ -n "$2" ]] && echo "$2($1) is not directory" >&2
         return 1
     fi
     return 0

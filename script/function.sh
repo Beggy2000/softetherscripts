@@ -83,6 +83,18 @@ function checkIfRoot () {
 
 
 #===  FUNCTION  ================================================================
+#          NAME:  checkIfServerIsStarted
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function checkIfServerIsStarted () {
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
+    systemctl is-active --quiet "${SYSTEMD_SERVICE_FILE}"
+}
+# ----------  end of function checkIfServerIsStarted  ----------
+
+#===  FUNCTION  ================================================================
 #          NAME:  updateTheSystem
 #   DESCRIPTION:  
 #    PARAMETERS:  
@@ -105,11 +117,11 @@ function updateTheSystem () {
 #       RETURNS:  
 #===============================================================================
 function getLastRTM () {
-    local programType=$1
+    local programType="$1"
     assertNotEmpty "${programType}" "programType" || return 1
-    local architectureType=$2
+    local architectureType="$2"
     assertNotEmpty "${architectureType}" "architectureType" || return 1
-    local archiveFile=$3
+    local archiveFile="$3"
     assertNotEmpty "${archiveFile}" "archiveFile" || return 1
 
     local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programType}" | grep "${architectureType}" | head -n 1)
@@ -127,11 +139,11 @@ function getLastRTM () {
 #       RETURNS:  
 #===============================================================================
 function unpackAndCompile () {
-    local programType=$1
+    local programType="$1"
     assertNotEmpty "${programType}" "programType" || return 1
-    local archiveFile=$2
+    local archiveFile="$2"
     assertReadableFile "${archiveFile}" "archiveFile" || return 1
-    local destinationDir=$3
+    local destinationDir="$3"
     assertExistingDirectory "${destinationDir}" "destinationDir" || return 1
     
     local programDirName="${destinationDir}/${programType}"
@@ -162,8 +174,9 @@ function unpackAndCompile () {
 function configureServer () {
     assertNotEmpty "${SERVER}" "SERVER" || return 1
     assertNotEmpty "${CONFIGURATOR}" "CONFIGURATOR" || return 1
+    assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
 
-    local serverDirName=$1
+    local serverDirName="$1"
     assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
     cd "${serverDirName}"
@@ -178,7 +191,7 @@ function configureServer () {
     find . -type f -exec chmod u=r,go= {} \;
     chmod u+x "./${SERVER}" 
     chmod u+x "./${CONFIGURATOR}"
-    runInitScript "${serverDirName}"          || return 1
+    runInitScript "${serverDirName}" || return 1
 
     # Reload service
     systemctl daemon-reload
@@ -199,8 +212,8 @@ function configureServer () {
 #       RETURNS:
 #===============================================================================
 function checkFileAndLink () {
-    local fileName=$1
-    local linkFileName=$2
+    local fileName="$1"
+    local linkFileName="$2"
     if [[ -e "${linkFileName}" ]]; then #broken link returns false
         if [[ ! -L "${linkFileName}" ]]; then
             echo "The ${linkFileName} is not a link. Stop the script to avoid overwriting it." >&2
@@ -224,9 +237,9 @@ function checkFileAndLink () {
 #       RETURNS:
 #===============================================================================
 function createFileAndLink () {
-    local fileName=$1
+    local fileName="$1"
     assertNotEmpty "${fileName}" "fileName" || return 1
-    local linkName=$2
+    local linkName="$2"
     assertNotEmpty "${linkName}" "linkName" || return 1
 
     checkFileAndLink "${confFileName}" "${linkName}" || return 1
@@ -243,13 +256,13 @@ function createFileAndLink () {
 #       RETURNS:
 #===============================================================================
 function tuneTheKernel () {
-    local serverDirName=$1
-    assertNotEmpty "${serverDirName}" "serverDirName" || return 1
+    local serverDirName="$1"
+    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
     assertNotEmpty "${SYSCTL_FILE}" "SYSCTL_FILE" || return 1
     assertNotEmpty "${SYSCTL_LINK}" "SYSCTL_LINK" || return 1
     
-    local sysctlFileName=${serverDirName}/${SYSCTL_FILE}
+    local sysctlFileName="${serverDirName}/${SYSCTL_FILE}"
     createFileAndLink "${sysctlFileName}" "${SYSCTL_LINK}" || return 1
 
     # Act as router
@@ -273,13 +286,13 @@ function tuneTheKernel () {
 #       RETURNS:
 #===============================================================================
 function setProperty () {
-    local fileName=$1
+    local fileName="$1"
     assertReadableFile "${fileName}" "fileName" || return 1
-    local propertyName=$2
+    local propertyName="$2"
     assertNotEmpty "${propertyName}" "propertyName" || return 1
     
     local escapedPropertyName=$(echo "${propertyName}" | sed 's|\.|\\.|g')
-    local propertyValue=$3
+    local propertyValue="$3"
     if [[ -z "${propertyValue}" ]] ; then
         #comment out
         sed -i "s|^\([[:space:]]*${escapedPropertyName}[[:space:]]*=\)|#\1|g" "${fileName}"
@@ -303,9 +316,11 @@ function setProperty () {
 #       RETURNS:
 #===============================================================================
 function generateSimpleConfig () {
-    local serverDirName=$1
-    assertNotEmpty "${serverDirName}" "serverDirName" || return 1
+    local serverDirName="$1"
+    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
+
     assertNotEmpty "${SERVER_CONFIG_FILE_NAME}" "SERVER_CONFIG_FILE_NAME" || return 1
+    assertNotEmpty "${SERVER_PORT}" "SERVER_PORT" || return 1
 
     local serverConfigFile="${serverDirName}/${SERVER_CONFIG_FILE_NAME}"
 
@@ -359,13 +374,13 @@ EOF
 #       RETURNS:
 #===============================================================================
 function generateSystemDService () {
-    local serverDirName=$1
-    assertNotEmpty "${serverDirName}" "serverDirName" || return 1
+    local serverDirName="$1"
+    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
 
     assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
     assertNotEmpty "${SYSTEMD_SERVICE_LINK}" "SYSTEMD_SERVICE_LINK" || return 1
     
-    local serviceFileName=${serverDirName}/${SYSTEMD_SERVICE_FILE}
+    local serviceFileName="${serverDirName}/${SYSTEMD_SERVICE_FILE}"
     createFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
 
     cat <<EOF >"${serviceFileName}"
@@ -403,8 +418,9 @@ EOF
 #       RETURNS:
 #===============================================================================
 function generateAdminIpConfig () {
-    local serverDirName=$1
-    assertNotEmpty "${serverDirName}" "serverDirName" || return 1
+    local serverDirName="$1"
+    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
+
     assertNotEmpty "${SERVER_ADMIN_IP_FILE_NAME}" "SERVER_ADMIN_IP_FILE_NAME" || return 1
     local adminIpTxt="${serverDirName}/${SERVER_ADMIN_IP_FILE_NAME}"
 
@@ -426,44 +442,73 @@ EOF
 
 
 #===  FUNCTION  ================================================================
+#          NAME:  runConfigatorScript
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function runConfigatorScript () {
+    local serverDirName="$1"
+    assertExistingDirectory "${serverDirName}" "serverDirName" || return 1
+
+    local scriptText="$2"
+    [[ -z "${scriptText}" ]] && return 0 #nothing to do
+
+    local configuratorCommand="${serverDirName}/${CONFIGURATOR}"
+    assertExecutableFile "${configuratorCommand}" "configuratorCommand" || return 1
+
+    assertNotEmpty "${SERVER_PORT}" "SERVER_PORT" || return 1
+
+    local serverIsAlreadyStarted="false"
+    checkIfServerIsStarted && serverIsAlreadyStarted="true"
+
+    if [[ "${serverIsAlreadyStarted}" == "false" ]]; then
+        local serverCommand="${serverDirName}/${SERVER}"
+        assertExecutableFile "${serverCommand}" "serverCommand" || return 1
+        "${serverCommand}" start
+        sleep 2
+    fi
+    
+    initTemporaryDir
+    local scriptFile=$(mktemp --tmpdir=${TEMPORARY_DIR})
+    printf '%s\n' "${scriptText}" > "${scriptFile}"
+    "${configuratorCommand}" localhost:${SERVER_PORT} /SERVER /IN:"${scriptFile}"
+    rm "${scriptFile}"
+    
+    if [[ "${serverIsAlreadyStarted}" == "false" ]]; then
+        "${serverCommand}" stop
+        sleep 2
+    fi
+}
+# ----------  end of function runConfigatorScript  ----------
+
+#===  FUNCTION  ================================================================
 #          NAME:  runInitScript
 #   DESCRIPTION:  
 #    PARAMETERS:
 #       RETURNS:
 #===============================================================================
 function runInitScript () {
-    local serverDirName=$1
-    assertNotEmpty "${serverDirName}" "serverDirName" || return 1
+    assertNotEmpty "${HUB_NAME}" "HUB_NAME" || return 1
     local hubPassword=""
-    read -s -p "Hub password: " hubPassword
+    read -s -p "${HUB_NAME} hub password: " hubPassword
     echo
-
-    initTemporaryDir
-    #start server
-    ./${SERVER} start
-    sleep 2
 
     #server command: https://www.softether.org/4-docs/1-manual/6._Command_Line_Management_Utility_Manual/6.3_VPN_Server_%2F%2F_VPN_Bridge_Management_Command_Reference_(For_Entire_Server)
     #hub command: https://www.softether.org/4-docs/1-manual/6._Command_Line_Management_Utility_Manual/6.4_VPN_Server_%2F%2F_VPN_Bridge_Management_Command_Reference_(For_Virtual_Hub)
     #more details about server cifers: https://wiki.mozilla.org/Security/Server_Side_TLS
-    local serverInitScript=${TEMPORARY_DIR}/serverInitScript.txt
-    cat<<EOF >"${serverInitScript}"
-        HubCreate BeggyHub /PASSWORD:${hubPassword}
+    local serverInitScript="$(cat <<EOF
+        HubCreate ${HUB_NAME} /PASSWORD:${hubPassword}
         ServerCipherSet DHE-RSA-AES256-GCM-SHA384
         OpenVpnEnable no /PORTS:1194
         SstpEnable no
         VpnAzureSetEnable no
         KeepDisable
-        Hub BeggyHub
+        Hub ${HUB_NAME}
         SecureNatEnable
 EOF
-    ./${CONFIGURATOR} localhost:${SERVER_PORT} /SERVER /IN:"${serverInitScript}"
-    rm "${serverInitScript}"
-
-    #stop server
-    ./${SERVER} stop
-    sleep 2
-
+)"
+    runConfigatorScript "$1" "${serverInitScript}"   
 }
 # ----------  end of function runInitScript  ----------
 
@@ -474,12 +519,12 @@ EOF
 #       RETURNS:
 #===============================================================================
 function uninstallServer () {
-    local serverDirName=$1
+    local serverDirName="$1"
     assertNotEmpty "${serverDirName}" "serverDirName" || return 1
     assertNotEmpty "${SERVER}" "SERVER" || return 1
     assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
 
-    local serverFile=${serverDirName}/${SERVER}
+    local serverFile="${serverDirName}/${SERVER}"
     [[ -x "${serverFile}" ]] && "${serverFile}" stop
 
     # Disable service
@@ -491,14 +536,14 @@ function uninstallServer () {
 
     assertNotEmpty "${SYSTEMD_SERVICE_FILE}" "SYSTEMD_SERVICE_FILE" || return 1
     assertNotEmpty "${SYSTEMD_SERVICE_LINK}" "SYSTEMD_SERVICE_LINK" || return 1
-    local serviceFileName=${serverDirName}/${SYSTEMD_SERVICE_FILE}
+    local serviceFileName="${serverDirName}/${SYSTEMD_SERVICE_FILE}"
     checkFileAndLink "${serviceFileName}" "${SYSTEMD_SERVICE_LINK}" || return 1
     [[ -e "${serviceFileName}" ]] && rm -v "${serviceFileName}"
     [[ -L "${SYSTEMD_SERVICE_LINK}" ]] && rm -v "${SYSTEMD_SERVICE_LINK}"
 
     assertNotEmpty "${SYSCTL_FILE}" "SYSCTL_FILE" || return 1
     assertNotEmpty "${SYSCTL_LINK}" "SYSCTL_LINK" || return 1
-    local sysctlFileName=${serverDirName}/${SYSCTL_FILE}
+    local sysctlFileName="${serverDirName}/${SYSCTL_FILE}"
     checkFileAndLink "${sysctlFileName}" "${SYSCTL_LINK}"
     [[ -e "${sysctlFileName}" ]] && rm -v "${sysctlFileName}"
     [[ -L "${SYSCTL_LINK}" ]] && rm -v "${SYSCTL_LINK}"
@@ -508,6 +553,126 @@ function uninstallServer () {
 }
 # ----------  end of function uninstallServer  ----------
 
+#===  FUNCTION  ================================================================
+#          NAME:  checkIfUserExists
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function checkIfUserExists () {
+    local userName="$2"
+    assertNotEmpty "${userName}" "userName" || return 1
+    
+    local userListScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        UserList
+EOF
+)"
+    
+    local userList="$(runConfigatorScript "$1" "${userListScript}" 2>&1 | sed -n 's/^User Name[[:space:]]*|//gp')"
+    echo "${userList}" | grep --quiet "${userName}"
+}
+# ----------  end of function checkIfUserExists  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  createUserCertificate
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function createUserCertificate () {
+    local userName="$2"
+    assertNotEmpty "${userName}" "userName" || return 1
+
+    local certificateFileName="$3"
+    assertNotExitingFile "${certificateFileName}" "certificateFileName" || return 1
+
+    local keyFileName="$4"
+    assertNotExitingFile "${keyFileName}" "keyFileName" || return 1
+
+    assertNotEmpty "${HUB_NAME}" "HUB_NAME" || return 1
+
+    local createUserCertificateScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        MakeCert /CN:${userName} /O:${USER_ORGANIZATION} /OU:${USER_UNIT} /C:${USER_COUNTRY} /ST:${USER_STATE} /L:${USER_LOCALE} /SERIAL:${USER_SERIAL} /EXPIRES:${USER_EXPIRES} /SAVECERT:${certificateFileName} /SAVEKEY:${keyFileName}
+EOF
+)"
+    
+    runConfigatorScript "$1" "${createUserCertificateScript}"
+    return 0
+}
+# ----------  end of function createUserCertificate  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  createUserOnServer
+#   DESCRIPTION:  preconditions: server started
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function createUserOnServer () {
+    local userName="$2"
+    assertNotEmpty "${userName}" "userName" || return 1
+
+    local certificateFileName="$3"
+    assertReadableFile "${certificateFileName}" "certificateFileName" || return 1
+
+    assertNotEmpty "${HUB_NAME}" "HUB_NAME" || return 1
+    
+    local addUserScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        UserCreate ${userName} /GROUP:none /REALNAME:none /NOTE:autogenerated
+        UserCertSet ${userName} /LOADCERT:${certificateFileName}
+EOF
+)"
+
+    runConfigatorScript "$1" "${addUserScript}"
+
+}
+# ----------  end of function createUserOnServer  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  packClientScript
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function packClientScript () {
+    local userName="$1"
+    assertNotEmpty "${userName}" "userName" || return 1
+
+    local certificateFileName="$2"
+    assertReadableFile "${certificateFileName}" "certificateFileName" || return 1
+
+    local keyFileName="$3"
+    assertReadableFile "${keyFileName}" "keyFileName" || return 1
+
+    local archiveFile="${WORK_DIRECTORY}/${userName}${CLIENT_ARCHIVE_SUFFIX}"
+    assertNotExitingFile "${archiveFile}" "archiveFile" ||  return 1
+
+    initTemporaryDir
+    local environmentFile="${TEMPORARY_DIR}/environment.sh"
+    cat <<EOF >"${environmentFile}"
+readonly ARCHITECTURE="${ARCHITECTURE}"
+readonly DESTINATION_DIR="${DESTINATION_DIR}"
+
+readonly SERVER_EXTERNAL_IP="${SERVER_EXTERNAL_IP}"
+readonly SERVER_PORT="443"
+readonly HUB_NAME="beggyHub"
+
+readonly CLIENT="vpnclient"
+readonly CONFIGURATOR="vpncmd"
+
+readonly USER_NAME="${userName}"
+EOF
+    tar --create --verbose --bzip2 --file="${archiveFile}" \
+        --directory="${WORK_DIRECTORY}" "${CLIENT_INSTALL_SCRIPT}" "$(basename "${LIBRARY}")" "$(basename "${UTIL}")" \
+        --directory="$(dirname "${environmentFile}")" "$(basename "${environmentFile}")" \
+        --directory="$(dirname "${certificateFileName}")" "$(basename "${certificateFileName}")" \
+        --directory="$(dirname "${keyFileName}")" "$(basename "${keyFileName}")"
+    rm "${environmentFile}"
+}
+# ----------  end of function packClientScript  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  onExit

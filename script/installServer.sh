@@ -19,10 +19,10 @@
 
 source "$(dirname "$0")/function.sh" || { echo "Critical error: there is no library $(dirname "$0")/function.sh" >&2 ; exit 1; }
 
+checkIfRoot || stopTheScript "You should start the script as root (sudo)." 1
+
 initTemporaryDir
 readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/sourceArchive.tar.gz
-
-checkIfRoot || stopTheScript "You should start the script as root (sudo)." 1
 
 updateTheSystem
 
