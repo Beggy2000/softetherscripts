@@ -107,20 +107,27 @@ function checkIfClientIsStarted () {
 # ----------  end of function checkIfClientIsStarted  ----------
 
 #===  FUNCTION  ================================================================
-#          NAME:  updateTheSystem
+#          NAME:  checkInstallation
 #   DESCRIPTION:  
 #    PARAMETERS:  
 #       RETURNS:  
 #===============================================================================
-function updateTheSystem () {
-    # Update system
-    apt-get update && apt-get -y upgrade
+function checkInstallation () {
+    local -a packageList=("$@")
+    local -a needToInstall=()
+    for package in "${packageList[@]}" ;  do
+        if ! dpkg --get-selections | grep 'install$' | grep --quiet "^${package}" ; then
+            needToInstall+=(${package})
+        fi
+    done
+    if [[ "${#needToInstall[@]}" -eq 0 ]]; then
+        return 0
+    fi
+    echo "please install following packages before proceed: ${needToInstall[@]}" >&2
+    return 1
 
-    # Get build tools
-    apt-get -y install build-essential wget curl gcc make wget tzdata git libreadline-dev libncurses-dev libssl-dev zlib1g-dev
 }	
-# ----------  end of function updateTheSystem  ----------
-
+# ----------  end of function checkInstallation  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  getLastRTM

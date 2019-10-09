@@ -19,12 +19,13 @@
 
 source "$(dirname "$0")/function.sh" || { echo "Critical error: there is no library $(dirname "$0")/function.sh" >&2 ; exit 1; }
 
+declare -a packageList=("build-essential" "curl" "gcc" "git" "libncurses-dev" "libreadline-dev" "libssl-dev" "make" "tzdata" "wget" "zlib1g-dev")
+checkInstallation "${packageList[@]}" || stopTheScript "" 1
+
 checkIfRoot || stopTheScript "You must start the script as root (sudo)." 1
 
 initTemporaryDir
 readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/sourceArchive.tar.gz
-
-updateTheSystem
 
 getLastRTM "${SERVER}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTheScript "" 1
 
