@@ -260,7 +260,6 @@ function createFileAndLink () {
     checkFileAndLink "${confFileName}" "${linkName}" || return 1
     [[ -e "${fileName}" ]] || touch "${fileName}"
     ln -sfv "${fileName}" "${linkName}"
-
 }
 # ----------  end of function createFileAndLink  ----------
 
@@ -655,15 +654,14 @@ function uninstallClient () {
     [[ -L "${SYSCTL_LINK}" ]] && rm -v "${SYSCTL_LINK}"
     service procps start
 
-    assertNotEmpty "${NETWORKD_DISPATCHER_OFF_LINK}" "NETWORKD_DISPATCHER_OFF_LINK" || return 1
-    local networkScript="${clientDirName}/${NETWORKD_DISPATCHER_SCRIPT}"
-    checkFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_OFF_LINK}" || return 1
-    [[ -L "${NETWORKD_DISPATCHER_OFF_LINK}" ]] && rm -v "${NETWORKD_DISPATCHER_OFF_LINK}"
+    assertNotEmpty "${NETWORKD_DISPATCHER_OFF}" "NETWORKD_DISPATCHER_OFF" || return 1
+    [[ -e "${NETWORKD_DISPATCHER_OFF}" ]] && rm -v "${NETWORKD_DISPATCHER_OFF_LINK}"
     
-    assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" "NETWORKD_DISPATCHER_ROUTABLE_LINK" || return 1
-    checkFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" || return 1
-    [[ -L "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" ]] && rm -v "${NETWORKD_DISPATCHER_ROUTABLE_LINK}"
-    [[ -e "${networkScript}" ]] && rm -v "${networkScript}"
+    assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE}" "NETWORKD_DISPATCHER_ROUTABLE" || return 1
+    [[ -e "${NETWORKD_DISPATCHER_ROUTABL}" ]] && rm -v "${NETWORKD_DISPATCHER_ROUTABLE}"
+
+    assertNotEmpty "${SYSTEMD_NETWORK_CONF}" "SYSTEMD_NETWORK_CONF" || return 1
+    [[ -e "${SYSTEMD_NETWORK_CONF}" ]] && rm -v "${SYSTEMD_NETWORK_CONF}"
 
     [[ -e "${clientDirName}" ]] && rm -rvf "${clientDirName}"
 }	
@@ -780,9 +778,9 @@ readonly SYSTEMD_SERVICE_LINK="/lib/systemd/system/vpnclient.service"
 readonly CLIENT_CONFIG_FILE_NAME="vpn_client.config"
 readonly SYSCTL_FILE="${SYSCTL_FILE}"
 readonly SYSCTL_LINK="/etc/sysctl.d/50-vpnclient.conf"
-readonly NETWORKD_DISPATCHER_SCRIPT="vpnOnOff.sh"
-readonly NETWORKD_DISPATCHER_OFF_LINK="/etc/networkd-dispatcher/off.d/50-restoreDefaultRoute.sh"
-readonly NETWORKD_DISPATCHER_ROUTABLE_LINK="/etc/networkd-dispatcher/routable.d/50-restoreDefaultRoute.sh"
+readonly NETWORKD_DISPATCHER_OFF="/etc/networkd-dispatcher/off.d/50-restoreDefaultRoute.sh"
+readonly NETWORKD_DISPATCHER_ROUTABLE="/etc/networkd-dispatcher/routable.d/50-restoreDefaultRoute.sh"
+readonly SYSTEMD_NETWORK_CONF="/etc/systemd/network/50-vpnclient.network"
 
 
 readonly SERVER_EXTERNAL_IP="${SERVER_EXTERNAL_IP}"
@@ -937,15 +935,13 @@ function generateNetworkdDispatcherScript () {
     local clientDirName="$1"
     assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
 
-    assertNotExitingFile "${NETWORKD_DISPATCHER_SCRIPT}" "NETWORKD_DISPATCHER_SCRIPT" || return 1
     assertNotEmpty "${IFACE_NAME}" "IFACE_NAME" || return 1
     assertNotEmpty "${SERVER_EXTERNAL_IP}" "SERVER_EXTERNAL_IP" || return 1
-    assertNotEmpty "${NETWORKD_DISPATCHER_OFF_LINK}" "NETWORKD_DISPATCHER_OFF_LINK" || return 1
-    assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE_LINK}" "NETWORKD_DISPATCHER_ROUTABLE_LINK" || return 1
 
-    local networkScript="${clientDirName}/${NETWORKD_DISPATCHER_SCRIPT}"
+    assertNotExitingFile "${NETWORKD_DISPATCHER_OFF}" "NETWORKD_DISPATCHER_OFF" || return 1
+    assertNotExitingFile "${NETWORKD_DISPATCHER_ROUTABLE}" "NETWORKD_DISPATCHER_ROUTABLE" || return 1
 
-    cat <<EOF >"${networkScript}"
+    cat <<EOF >"${NETWORKD_DISPATCHER_OFF}"
 #!/bin/bash - 
 
 [[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
@@ -955,24 +951,61 @@ if [[ "\${STATE}" == "off" ]] ; then
     netplan apply
     exit 0
 fi
+EOF
+    chmod u=rx "${NETWORKD_DISPATCHER_OFF}"
+
+
+    cat <<EOF >"${NETWORKD_DISPATCHER_ROUTABLE}"
+#!/bin/bash - 
+
+[[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
 
 if [[ "\${STATE}" == "routable" ]] ; then
-    read  -a routeStr < <(route -n | grep '^0.0.0.0') 
+    read  -a routeStr < <(route -n | grep -v '${IFACE_NAME}$' | grep '^0.0.0.0' )
     gatewayIp=\${routeStr[1]}
     gatewayInterface=\${routeStr[7]}
 
     # add a route to the VPN server’s IP address via old default route
-    route add -host ${SERVER_EXTERNAL_IP} gw \${gatewayIp}
+    ip route add ${SERVER_EXTERNAL_IP} via \${gatewayIp}
     # delete the default route for this interface
-    route del default dev \${gatewayInterface}
+    ip route del default dev \${gatewayInterface}
     exit 0
 fi
 EOF
-    chmod u=rx,go= "${networkScript}"
-    createFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_OFF_LINK}"
-    createFileAndLink "${networkScript}" "${NETWORKD_DISPATCHER_ROUTABLE_LINK}"
+    chmod u=rx "${NETWORKD_DISPATCHER_ROUTABLE}"
 }	
 # ----------  end of function generateNetworkdDispatcherScript  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  generateSystemdNetworkd
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function generateSystemdNetworkd () {
+    local clientDirName="$1"
+    assertExistingDirectory "${clientDirName}" "clientDirName" || return 1
+    assertNotEmpty "${IFACE_NAME}" "IFACE_NAME" || return 1
+
+    assertNotExitingFile "${SYSTEMD_NETWORK_CONF}" "SYSTEMD_NETWORK_CONF" || return 1
+    
+    cat <<EOF >"${SYSTEMD_NETWORK_CONF}"
+    [Match]
+    Name=vpn_${IFACE_NAME}
+
+    [Network]
+    DHCP=ipv4
+    LinkLocalAddressing=ipv6
+
+    [DHCP]
+    RouteMetric=1
+    UseMTU=true
+EOF
+    chmod a=r "${SYSTEMD_NETWORK_CONF}"
+
+}	
+# ----------  end of function generateSystemdNetworkd  ----------
 
 #===  FUNCTION  ================================================================
 #          NAME:  configureClient
@@ -1000,6 +1033,7 @@ function configureClient () {
     runClientInitScript "${clientDirName}" || return 1
 
     generateNetworkdDispatcherScript "${clientDirName}" || return 1
+    generateSystemdNetworkd "${clientDirName}" || return 1
 
     # Reload service
     systemctl daemon-reload
