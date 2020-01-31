@@ -19,6 +19,9 @@
 
 source "$(dirname "$0")/function.sh" || { echo "Critical error: there is no library $(dirname "$0")/function.sh" >&2 ; exit 1; }
 
+declare -a packageList=("curl" "net-tools")
+checkInstallation "${packageList[@]}" || stopTheScript "" 1
+
 checkIfRoot || stopTheScript "You should start the script as root (sudo)." 1
 checkIfServerIsStarted || stopTheScript "VPN server should be stated. (Eg. systemctl restart ${SYSTEMD_SERVICE_FILE})" 1
 
@@ -42,7 +45,7 @@ declare keyFileName=""
 
 for userName in "${nameList[@]}"; do 
     if checkIfUserExists "${programDirName}" "${userName}" ; then
-        echo "User ${userName} is already exists" >&2
+        echo "User ${userName} already exists" >&2
         continue
     fi
     
