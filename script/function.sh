@@ -668,6 +668,43 @@ function uninstallClient () {
 # ----------  end of function uninstallClient  ----------
 
 #===  FUNCTION  ================================================================
+#          NAME:  getUserList
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function getUserList () {
+    local userListScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        UserList
+EOF
+)"
+    
+    runServerConfigScript "$1" "${userListScript}" 2>&1
+}
+# ----------  end of function getUserList  ----------
+
+#===  FUNCTION  ================================================================
+#          NAME:  deleteUser
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function deleteUser () {
+    local userName="$2"
+    assertNotEmpty "${userName}" "userName" || return 1
+
+    local userListScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        UserDelete ${userName}
+EOF
+)"
+    
+    runServerConfigScript "$1" "${userListScript}" 2>&1
+}
+# ----------  end of function deleteUser  ----------
+
+#===  FUNCTION  ================================================================
 #          NAME:  checkIfUserExists
 #   DESCRIPTION:  
 #    PARAMETERS:
@@ -683,7 +720,7 @@ function checkIfUserExists () {
 EOF
 )"
     
-    local userList="$(runServerConfigScript "$1" "${userListScript}" 2>&1 | sed -n 's/^User Name[[:space:]]*|//gp')"
+    local userList="$(getUserList "$1" | sed -n 's/^User Name[[:space:]]*|//gp')"
     echo "${userList}" | grep --quiet "${userName}"
 }
 # ----------  end of function checkIfUserExists  ----------
