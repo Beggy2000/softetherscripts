@@ -655,10 +655,10 @@ function uninstallClient () {
     service procps start
 
     assertNotEmpty "${NETWORKD_DISPATCHER_OFF}" "NETWORKD_DISPATCHER_OFF" || return 1
-    [[ -e "${NETWORKD_DISPATCHER_OFF}" ]] && rm -v "${NETWORKD_DISPATCHER_OFF_LINK}"
+    [[ -e "${NETWORKD_DISPATCHER_OFF}" ]] && rm -v "${NETWORKD_DISPATCHER_OFF}"
     
     assertNotEmpty "${NETWORKD_DISPATCHER_ROUTABLE}" "NETWORKD_DISPATCHER_ROUTABLE" || return 1
-    [[ -e "${NETWORKD_DISPATCHER_ROUTABL}" ]] && rm -v "${NETWORKD_DISPATCHER_ROUTABLE}"
+    [[ -e "${NETWORKD_DISPATCHER_ROUTABLE}" ]] && rm -v "${NETWORKD_DISPATCHER_ROUTABLE}"
 
     assertNotEmpty "${SYSTEMD_NETWORK_CONF}" "SYSTEMD_NETWORK_CONF" || return 1
     [[ -e "${SYSTEMD_NETWORK_CONF}" ]] && rm -v "${SYSTEMD_NETWORK_CONF}"
