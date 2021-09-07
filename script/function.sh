@@ -178,7 +178,8 @@ function unpackAndCompile () {
     cd "${programDirName}"
     # Workaround for 18.04+
     #sed -i 's|^[[:space:]]*NO_PIE_OPTION=[[:space:]]*$|NO_PIE_OPTION=-no-pie|' Makefile
-    make i_read_and_agree_the_license_agreement
+    #make i_read_and_agree_the_license_agreement
+    make 
     cd - > /dev/null #to prevent directory name output
     return 0 
 }	
