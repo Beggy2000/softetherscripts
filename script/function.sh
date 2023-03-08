@@ -143,9 +143,16 @@ function getLastRTM () {
     local archiveFile="$3"
     assertNotEmpty "${archiveFile}" "archiveFile" || return 1
 
-    local rtmFileUrl=$(curl https://github.com/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | grep rtm | grep "${programType}" | grep "${architectureType}" | head -n 1)
+    local githubUrl='https://github.com'
+
+    local tagName=$(curl "${githubUrl}"/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/tag/[^"]*' | grep rtm | sed 's|/tag/|/expanded_assets/|g')
+
+    echo "tagName: ${tagName}"
+
+    local rtmFileUrl=$(curl "${githubUrl}${tagName}" |  grep "${programType}" | grep "${architectureType}" | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/download/[^"]*' | head -n 1)
+
     echo "${rtmFileUrl} was found as last rtm version."
-    wget "https://github.com/${rtmFileUrl}" -O "${archiveFile}"
+    wget "${githubUrl}${rtmFileUrl}" -O "${archiveFile}"
     return 0
 }	
 # ----------  end of function getLastRTM  ----------
@@ -990,7 +997,7 @@ if [[ "\${STATE}" == "off" ]] ; then
     exit 0
 fi
 EOF
-    chmod u=rx "${NETWORKD_DISPATCHER_OFF}"
+    chmod u=rxw,go=rx "${NETWORKD_DISPATCHER_OFF}"
 
 
     cat <<EOF >"${NETWORKD_DISPATCHER_ROUTABLE}"
@@ -1010,7 +1017,7 @@ if [[ "\${STATE}" == "routable" ]] ; then
     exit 0
 fi
 EOF
-    chmod u=rx "${NETWORKD_DISPATCHER_ROUTABLE}"
+    chmod u=rxw,go=rx "${NETWORKD_DISPATCHER_ROUTABLE}"
 }	
 # ----------  end of function generateNetworkdDispatcherScript  ----------
 
