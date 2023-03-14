@@ -106,6 +106,47 @@ function checkIfClientIsStarted () {
 }
 # ----------  end of function checkIfClientIsStarted  ----------
 
+
+#===  FUNCTION  ================================================================
+#          NAME:  checkNetworkManager
+#   DESCRIPTION:  
+#    PARAMETERS:  
+#       RETURNS:  
+#===============================================================================
+function checkNetworkManager () {
+    if dpkg --get-selections | grep 'install$' | grep --quiet "network-manager" ; then
+cat <<EOF >&2
+    This vpn client can work only with systems-networkd but not with Network Manager. Please check 
+network manager packages and remove it:
+
+$ dpkg --get-selections | grep "network-manager" #list of the packages
+
+    After that create/update file for netplan. Eg:
+
+$ ls -la /etc/netplan/01-netcfg.yaml #check if the file exists
+$ cat <<MARK_END | sudo tee /etc/netplan/01-netcfg.yaml
+# This file describes the network interfaces available on your system
+# For more information, see netplan(5) or https://netplan.io/examples
+
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp0s3:
+      dhcp4: true
+      dhcp4-overrides:
+        use-dns: false
+MARK_END
+
+    Restart and check you have an internet
+EOF
+        return 1
+    fi
+
+    return 0
+}	
+# ----------  end of function checkNetworkManager  ----------
+
 #===  FUNCTION  ================================================================
 #          NAME:  checkInstallation
 #   DESCRIPTION:  
@@ -1006,9 +1047,9 @@ EOF
 [[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
 
 if [[ "\${STATE}" == "routable" ]] ; then
-    read  -a routeStr < <(route -n | grep -v '${IFACE_NAME}$' | grep '^0.0.0.0' )
-    gatewayIp=\${routeStr[1]}
-    gatewayInterface=\${routeStr[7]}
+    read -a routeStr < <(ip route | grep -v '${IFACE_NAME}$' | grep '^default')
+    gatewayIp=\${routeStr[2]}
+    gatewayInterface=\${routeStr[4]}
 
     # add a route to the VPN server’s IP address via old default route
     ip route add ${SERVER_EXTERNAL_IP} via \${gatewayIp}
