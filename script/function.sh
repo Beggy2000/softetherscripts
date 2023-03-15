@@ -114,7 +114,7 @@ function checkIfClientIsStarted () {
 #       RETURNS:  
 #===============================================================================
 function checkNetworkManager () {
-    if dpkg --get-selections | grep 'install$' | grep --quiet "network-manager" ; then
+    if dpkg --get-selections | grep -v 'deinstall$' | grep 'install$' | grep --quiet "network-manager" ; then
 cat <<EOF >&2
     This vpn client can work only with systems-networkd but not with Network Manager. Please check 
 network manager packages and remove it:
@@ -1047,7 +1047,7 @@ EOF
 [[ "\${IFACE}" != "vpn_${IFACE_NAME}" ]] && exit 0
 
 if [[ "\${STATE}" == "routable" ]] ; then
-    read -a routeStr < <(ip route | grep -v '${IFACE_NAME}$' | grep '^default')
+    read -a routeStr < <(ip route | grep -v '${IFACE_NAME}' | grep '^default')
     gatewayIp=\${routeStr[2]}
     gatewayInterface=\${routeStr[4]}
 
