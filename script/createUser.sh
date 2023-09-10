@@ -39,7 +39,11 @@ if [[ ${#nameList[@]} -eq 0 ]]; then
 fi
 
 initTemporaryDir
-declare programDirName="${DESTINATION_DIR}/${SERVER}"
+
+readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/${SOURCE_FILE_NAME}
+getLastRTM "${CLIENT}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTheScript "" 1
+
+readonly programDirName="${DESTINATION_DIR}/${SERVER}"
 declare certificateFileName=""
 declare keyFileName=""
 
@@ -53,7 +57,7 @@ for userName in "${nameList[@]}"; do
     keyFileName="${TEMPORARY_DIR}/${userName}.key"
     createUserCertificate "${programDirName}" "${userName}" "${certificateFileName}" "${keyFileName}" || break
     createUserOnServer "${programDirName}" "${userName}" "${certificateFileName}" || break
-    packClientScript "${userName}" "${certificateFileName}" "${keyFileName}" || break
+    packClientScript "${userName}" "${certificateFileName}" "${keyFileName}" "${ARCHIVE_FILE_NAME}" || break
     rm "${certificateFileName}" "${keyFileName}"
 done
 

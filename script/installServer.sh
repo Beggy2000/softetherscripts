@@ -25,7 +25,7 @@ checkInstallation "${packageList[@]}" || stopTheScript "" 1
 checkIfRoot || stopTheScript "You must start the script as root (sudo)." 1
 
 initTemporaryDir
-readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/sourceArchive.tar.gz
+readonly ARCHIVE_FILE_NAME=${TEMPORARY_DIR}/${SOURCE_FILE_NAME}
 
 getLastRTM "${SERVER}" "${ARCHITECTURE}" "${ARCHIVE_FILE_NAME}" || stopTheScript "" 1
 

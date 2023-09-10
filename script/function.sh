@@ -726,6 +726,11 @@ function getUserList () {
     local userListScript="$(cat <<EOF
         Hub ${HUB_NAME}
         UserList
+	SecureNatStatusGet
+	SecureNatHostGet
+	NatGet
+	DhcpGet
+	DhcpTable
 EOF
 )"
     
@@ -847,6 +852,9 @@ function packClientScript () {
     local keyFileName="$3"
     assertReadableFile "${keyFileName}" "keyFileName" || return 1
 
+    local sourceFileName="$4"
+    assertReadableFile "${sourceFileName}" "sourceFileName" || return 1
+
     local archiveFile="${WORK_DIRECTORY}/${userName}${CLIENT_ARCHIVE_SUFFIX}"
     assertNotExitingFile "${archiveFile}" "archiveFile" ||  return 1
 
@@ -858,6 +866,8 @@ function packClientScript () {
     cat <<EOF >"${environmentFile}"
 readonly ARCHITECTURE="${ARCHITECTURE}"
 readonly DESTINATION_DIR="${DESTINATION_DIR}"
+readonly SOURCE_FILE_NAME="$(basename "${sourceFileName}")"
+
 readonly SYSTEMD_SERVICE_FILE="vpnclient.service"
 readonly SYSTEMD_SERVICE_LINK="/lib/systemd/system/vpnclient.service"
 
@@ -886,6 +896,7 @@ EOF
         --directory="${WORK_DIRECTORY}" "${CLIENT_INSTALL_SCRIPT}" "${CLIENT_UNINSTALL_SCRIPT}" "$(basename "${LIBRARY}")" "$(basename "${UTIL}")" \
         --directory="$(dirname "${environmentFile}")" "$(basename "${environmentFile}")" \
         --directory="$(dirname "${certificateFileName}")" "$(basename "${certificateFileName}")" \
+        --directory="$(dirname "${sourceFileName}")" "$(basename "${sourceFileName}")" \
         --directory="$(dirname "${keyFileName}")" "$(basename "${keyFileName}")"
     rm "${environmentFile}"
 }
