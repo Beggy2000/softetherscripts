@@ -726,13 +726,13 @@ function getUserList () {
     local userListScript="$(cat <<EOF
         Hub ${HUB_NAME}
         UserList
-	SecureNatStatusGet
-	SecureNatHostGet
-	NatGet
-	DhcpGet
-	DhcpTable
 EOF
 )"
+#SecureNatStatusGet
+#SecureNatHostGet
+#NatGet
+#DhcpGet
+#DhcpTable
     
     runServerConfigScript "$1" "${userListScript}" 2>&1
 }
