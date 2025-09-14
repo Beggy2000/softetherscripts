@@ -186,7 +186,7 @@ function getLastRTM () {
 
     local githubUrl='https://github.com'
 
-    local tagName=$(curl "${githubUrl}"/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/tag/[^"]*' | grep rtm | sed 's|/tag/|/expanded_assets/|g')
+    local tagName=$(curl "${githubUrl}"/SoftEtherVPN/SoftEtherVPN_Stable/releases/ | grep -o '/SoftEtherVPN/SoftEtherVPN_Stable/releases/tag/[^"]*' | grep rtm | sed 's|/tag/|/expanded_assets/|g' | sort -g | tail -1)
 
     echo "tagName: ${tagName}"
 
