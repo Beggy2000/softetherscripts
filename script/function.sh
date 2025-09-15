@@ -423,6 +423,7 @@ declare root
                 bool DisableDos false
                 bool Enabled true
                 uint Port ${SERVER_PORT}
+		bool UseHttpProxyMasquerade true
             } 
         }
         declare ServerConfiguration
@@ -737,6 +738,59 @@ EOF
     runServerConfigScript "$1" "${userListScript}" 2>&1
 }
 # ----------  end of function getUserList  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  fullLogOn
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function fullLogOn () {
+    local fullLogOnScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        LogPacketSaveType /TYPE:tcpconn /SAVE:full
+        LogPacketSaveType /TYPE:tcpdata /SAVE:full
+        LogPacketSaveType /TYPE:dhcp /SAVE:full
+        LogPacketSaveType /TYPE:udp /SAVE:full
+        LogPacketSaveType /TYPE:icmp /SAVE:full
+        LogPacketSaveType /TYPE:ip /SAVE:full
+        LogPacketSaveType /TYPE:arp /SAVE:full
+        LogPacketSaveType /TYPE:ether /SAVE:full
+        LogGet
+EOF
+)"
+
+    runServerConfigScript "$1" "${fullLogOnScript}" 2>&1
+}
+# ----------  end of function fullLogOn  ----------
+
+
+#===  FUNCTION  ================================================================
+#          NAME:  fullLogOff
+#   DESCRIPTION:  
+#    PARAMETERS:
+#       RETURNS:
+#===============================================================================
+function fullLogOff () {
+    local fullLogOffScript="$(cat <<EOF
+        Hub ${HUB_NAME}
+        LogPacketSaveType /TYPE:tcpconn /SAVE:header
+        LogPacketSaveType /TYPE:tcpdata /SAVE:none
+        LogPacketSaveType /TYPE:dhcp /SAVE:header
+        LogPacketSaveType /TYPE:udp /SAVE:none
+        LogPacketSaveType /TYPE:icmp /SAVE:none
+        LogPacketSaveType /TYPE:ip /SAVE:none
+        LogPacketSaveType /TYPE:arp /SAVE:none
+        LogPacketSaveType /TYPE:ether /SAVE:none
+        LogGet
+EOF
+)"
+
+    runServerConfigScript "$1" "${fullLogOffScript}" 2>&1
+}
+# ----------  end of function fullLogOff  ----------
+
 
 #===  FUNCTION  ================================================================
 #          NAME:  deleteUser
